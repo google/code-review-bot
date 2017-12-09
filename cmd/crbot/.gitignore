@@ -1,0 +1,2 @@
+# Ignore binary if created via `go build .`
+crbot
