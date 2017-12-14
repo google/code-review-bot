@@ -67,7 +67,7 @@ func main() {
 
 	ctx := context.Background()
 
-	// Configure authentication and connet to GitHub.
+	// Configure authentication and connect to GitHub.
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: cfg.Auth},
 	)
