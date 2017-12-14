@@ -19,6 +19,7 @@
 package ghutil
 
 import (
+	context "context"
 	gomock "github.com/golang/mock/gomock"
 	github "github.com/google/go-github/github"
 	reflect "reflect"
@@ -71,9 +72,9 @@ func (m *MockRepositoriesService) EXPECT() *MockRepositoriesServiceMockRecorder 
 }
 
 // Get mocks base method
-func (m *MockRepositoriesService) Get(owner, repo string) (*github.Repository, *github.Response, error) {
+func (m *MockRepositoriesService) Get(ctx context.Context, owner, repo string) (*github.Repository, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", owner, repo)
+	ret := m.ctrl.Call(m, "Get", ctx, owner, repo)
 	ret0, _ := ret[0].(*github.Repository)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -81,15 +82,15 @@ func (m *MockRepositoriesService) Get(owner, repo string) (*github.Repository, *
 }
 
 // Get indicates an expected call of Get
-func (mr *MockRepositoriesServiceMockRecorder) Get(owner, repo interface{}) *gomock.Call {
+func (mr *MockRepositoriesServiceMockRecorder) Get(ctx, owner, repo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockRepositoriesService)(nil).Get), owner, repo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockRepositoriesService)(nil).Get), ctx, owner, repo)
 }
 
 // List mocks base method
-func (m *MockRepositoriesService) List(user string, opt *github.RepositoryListOptions) ([]*github.Repository, *github.Response, error) {
+func (m *MockRepositoriesService) List(ctx context.Context, user string, opt *github.RepositoryListOptions) ([]*github.Repository, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", user, opt)
+	ret := m.ctrl.Call(m, "List", ctx, user, opt)
 	ret0, _ := ret[0].([]*github.Repository)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -97,9 +98,9 @@ func (m *MockRepositoriesService) List(user string, opt *github.RepositoryListOp
 }
 
 // List indicates an expected call of List
-func (mr *MockRepositoriesServiceMockRecorder) List(user, opt interface{}) *gomock.Call {
+func (mr *MockRepositoriesServiceMockRecorder) List(ctx, user, opt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockRepositoriesService)(nil).List), user, opt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockRepositoriesService)(nil).List), ctx, user, opt)
 }
 
 // MockIssuesService is a mock of IssuesService interface
@@ -126,9 +127,9 @@ func (m *MockIssuesService) EXPECT() *MockIssuesServiceMockRecorder {
 }
 
 // AddLabelsToIssue mocks base method
-func (m *MockIssuesService) AddLabelsToIssue(owner, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
+func (m *MockIssuesService) AddLabelsToIssue(ctx context.Context, owner, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLabelsToIssue", owner, repo, number, labels)
+	ret := m.ctrl.Call(m, "AddLabelsToIssue", ctx, owner, repo, number, labels)
 	ret0, _ := ret[0].([]*github.Label)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -136,15 +137,15 @@ func (m *MockIssuesService) AddLabelsToIssue(owner, repo string, number int, lab
 }
 
 // AddLabelsToIssue indicates an expected call of AddLabelsToIssue
-func (mr *MockIssuesServiceMockRecorder) AddLabelsToIssue(owner, repo, number, labels interface{}) *gomock.Call {
+func (mr *MockIssuesServiceMockRecorder) AddLabelsToIssue(ctx, owner, repo, number, labels interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLabelsToIssue", reflect.TypeOf((*MockIssuesService)(nil).AddLabelsToIssue), owner, repo, number, labels)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLabelsToIssue", reflect.TypeOf((*MockIssuesService)(nil).AddLabelsToIssue), ctx, owner, repo, number, labels)
 }
 
 // CreateComment mocks base method
-func (m *MockIssuesService) CreateComment(owner, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error) {
+func (m *MockIssuesService) CreateComment(ctx context.Context, owner, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateComment", owner, repo, number, comment)
+	ret := m.ctrl.Call(m, "CreateComment", ctx, owner, repo, number, comment)
 	ret0, _ := ret[0].(*github.IssueComment)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -152,15 +153,15 @@ func (m *MockIssuesService) CreateComment(owner, repo string, number int, commen
 }
 
 // CreateComment indicates an expected call of CreateComment
-func (mr *MockIssuesServiceMockRecorder) CreateComment(owner, repo, number, comment interface{}) *gomock.Call {
+func (mr *MockIssuesServiceMockRecorder) CreateComment(ctx, owner, repo, number, comment interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateComment", reflect.TypeOf((*MockIssuesService)(nil).CreateComment), owner, repo, number, comment)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateComment", reflect.TypeOf((*MockIssuesService)(nil).CreateComment), ctx, owner, repo, number, comment)
 }
 
 // GetLabel mocks base method
-func (m *MockIssuesService) GetLabel(owner, repo, name string) (*github.Label, *github.Response, error) {
+func (m *MockIssuesService) GetLabel(ctx context.Context, owner, repo, name string) (*github.Label, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLabel", owner, repo, name)
+	ret := m.ctrl.Call(m, "GetLabel", ctx, owner, repo, name)
 	ret0, _ := ret[0].(*github.Label)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -168,15 +169,15 @@ func (m *MockIssuesService) GetLabel(owner, repo, name string) (*github.Label, *
 }
 
 // GetLabel indicates an expected call of GetLabel
-func (mr *MockIssuesServiceMockRecorder) GetLabel(owner, repo, name interface{}) *gomock.Call {
+func (mr *MockIssuesServiceMockRecorder) GetLabel(ctx, owner, repo, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLabel", reflect.TypeOf((*MockIssuesService)(nil).GetLabel), owner, repo, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLabel", reflect.TypeOf((*MockIssuesService)(nil).GetLabel), ctx, owner, repo, name)
 }
 
 // ListLabelsByIssue mocks base method
-func (m *MockIssuesService) ListLabelsByIssue(owner, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error) {
+func (m *MockIssuesService) ListLabelsByIssue(ctx context.Context, owner, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListLabelsByIssue", owner, repo, number, opt)
+	ret := m.ctrl.Call(m, "ListLabelsByIssue", ctx, owner, repo, number, opt)
 	ret0, _ := ret[0].([]*github.Label)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -184,24 +185,24 @@ func (m *MockIssuesService) ListLabelsByIssue(owner, repo string, number int, op
 }
 
 // ListLabelsByIssue indicates an expected call of ListLabelsByIssue
-func (mr *MockIssuesServiceMockRecorder) ListLabelsByIssue(owner, repo, number, opt interface{}) *gomock.Call {
+func (mr *MockIssuesServiceMockRecorder) ListLabelsByIssue(ctx, owner, repo, number, opt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLabelsByIssue", reflect.TypeOf((*MockIssuesService)(nil).ListLabelsByIssue), owner, repo, number, opt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLabelsByIssue", reflect.TypeOf((*MockIssuesService)(nil).ListLabelsByIssue), ctx, owner, repo, number, opt)
 }
 
 // RemoveLabelForIssue mocks base method
-func (m *MockIssuesService) RemoveLabelForIssue(owner, repo string, number int, label string) (*github.Response, error) {
+func (m *MockIssuesService) RemoveLabelForIssue(ctx context.Context, owner, repo string, number int, label string) (*github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveLabelForIssue", owner, repo, number, label)
+	ret := m.ctrl.Call(m, "RemoveLabelForIssue", ctx, owner, repo, number, label)
 	ret0, _ := ret[0].(*github.Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RemoveLabelForIssue indicates an expected call of RemoveLabelForIssue
-func (mr *MockIssuesServiceMockRecorder) RemoveLabelForIssue(owner, repo, number, label interface{}) *gomock.Call {
+func (mr *MockIssuesServiceMockRecorder) RemoveLabelForIssue(ctx, owner, repo, number, label interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLabelForIssue", reflect.TypeOf((*MockIssuesService)(nil).RemoveLabelForIssue), owner, repo, number, label)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLabelForIssue", reflect.TypeOf((*MockIssuesService)(nil).RemoveLabelForIssue), ctx, owner, repo, number, label)
 }
 
 // MockPullRequestsService is a mock of PullRequestsService interface
@@ -228,9 +229,9 @@ func (m *MockPullRequestsService) EXPECT() *MockPullRequestsServiceMockRecorder 
 }
 
 // List mocks base method
-func (m *MockPullRequestsService) List(owner, repo string, opt *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error) {
+func (m *MockPullRequestsService) List(ctx context.Context, owner, repo string, opt *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List", owner, repo, opt)
+	ret := m.ctrl.Call(m, "List", ctx, owner, repo, opt)
 	ret0, _ := ret[0].([]*github.PullRequest)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -238,15 +239,15 @@ func (m *MockPullRequestsService) List(owner, repo string, opt *github.PullReque
 }
 
 // List indicates an expected call of List
-func (mr *MockPullRequestsServiceMockRecorder) List(owner, repo, opt interface{}) *gomock.Call {
+func (mr *MockPullRequestsServiceMockRecorder) List(ctx, owner, repo, opt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockPullRequestsService)(nil).List), owner, repo, opt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockPullRequestsService)(nil).List), ctx, owner, repo, opt)
 }
 
 // ListCommits mocks base method
-func (m *MockPullRequestsService) ListCommits(owner, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error) {
+func (m *MockPullRequestsService) ListCommits(ctx context.Context, owner, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListCommits", owner, repo, number, opt)
+	ret := m.ctrl.Call(m, "ListCommits", ctx, owner, repo, number, opt)
 	ret0, _ := ret[0].([]*github.RepositoryCommit)
 	ret1, _ := ret[1].(*github.Response)
 	ret2, _ := ret[2].(error)
@@ -254,7 +255,7 @@ func (m *MockPullRequestsService) ListCommits(owner, repo string, number int, op
 }
 
 // ListCommits indicates an expected call of ListCommits
-func (mr *MockPullRequestsServiceMockRecorder) ListCommits(owner, repo, number, opt interface{}) *gomock.Call {
+func (mr *MockPullRequestsServiceMockRecorder) ListCommits(ctx, owner, repo, number, opt interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCommits", reflect.TypeOf((*MockPullRequestsService)(nil).ListCommits), owner, repo, number, opt)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCommits", reflect.TypeOf((*MockPullRequestsService)(nil).ListCommits), ctx, owner, repo, number, opt)
 }

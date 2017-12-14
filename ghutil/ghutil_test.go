@@ -15,6 +15,7 @@
 package ghutil_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -80,7 +81,7 @@ func TestGetAllRepos_OrgAndRepo(t *testing.T) {
 
 	mockGhc.Repositories.EXPECT().Get(orgName, repoName).Return(&repo, nil, nil)
 
-	repos := ghc.GetAllRepos(orgName, repoName)
+	repos := ghc.GetAllRepos(context.Background(), orgName, repoName)
 	if len(repos) != 1 {
 		t.Logf("repos is not of length 1: %v", repos)
 		t.Fail()
@@ -98,7 +99,7 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 
 	mockGhc.Repositories.EXPECT().List(orgName, nil).Return(expectedRepos, nil, nil)
 
-	actualRepos := ghc.GetAllRepos(orgName, "")
+	actualRepos := ghc.GetAllRepos(context.Background(), orgName, "")
 	if len(expectedRepos) != len(actualRepos) {
 		t.Logf("Expected repos: %v, actual repos: %v", expectedRepos, actualRepos)
 		t.Fail()
@@ -112,7 +113,7 @@ func TestVerifyRepoHasClaLabels_NoLabels(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaYes).Return(noLabel, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaNo).Return(noLabel, nil, nil)
 
-	if ghc.VerifyRepoHasClaLabels(orgName, repoName) {
+	if ghc.VerifyRepoHasClaLabels(context.Background(), orgName, repoName) {
 		t.Log("Should have returned false")
 		t.Fail()
 	}
@@ -127,7 +128,7 @@ func TestVerifyRepoHasClaLabels_HasYesOnly(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaYes).Return(&label, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaNo).Return(noLabel, nil, nil)
 
-	if ghc.VerifyRepoHasClaLabels(orgName, repoName) {
+	if ghc.VerifyRepoHasClaLabels(context.Background(), orgName, repoName) {
 		t.Log("Should have returned false")
 		t.Fail()
 	}
@@ -142,7 +143,7 @@ func TestVerifyRepoHasClaLabels_HasNoOnly(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaYes).Return(noLabel, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaNo).Return(&label, nil, nil)
 
-	if ghc.VerifyRepoHasClaLabels(orgName, repoName) {
+	if ghc.VerifyRepoHasClaLabels(context.Background(), orgName, repoName) {
 		t.Log("Should have returned false")
 		t.Fail()
 	}
@@ -158,7 +159,7 @@ func TestVerifyRepoHasClaLabels_YesAndNoLabels(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaYes).Return(&labelYes, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(orgName, repoName, ghutil.LabelClaNo).Return(&labelNo, nil, nil)
 
-	if !ghc.VerifyRepoHasClaLabels(orgName, repoName) {
+	if !ghc.VerifyRepoHasClaLabels(context.Background(), orgName, repoName) {
 		t.Log("Should have returned true")
 		t.Fail()
 	}

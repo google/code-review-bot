@@ -15,6 +15,7 @@
 package ghutil
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -37,24 +38,24 @@ type OrganizationsService interface {
 // RepositoriesService is the subset of `github.RepositoriesService` used by
 // this module.
 type RepositoriesService interface {
-	Get(owner string, repo string) (*github.Repository, *github.Response, error)
-	List(user string, opt *github.RepositoryListOptions) ([]*github.Repository, *github.Response, error)
+	Get(ctx context.Context, owner string, repo string) (*github.Repository, *github.Response, error)
+	List(ctx context.Context, user string, opt *github.RepositoryListOptions) ([]*github.Repository, *github.Response, error)
 }
 
 // IssuesService is the subset of `github.IssuesService` used by this module.
 type IssuesService interface {
-	AddLabelsToIssue(owner string, repo string, number int, labels []string) ([]*github.Label, *github.Response, error)
-	CreateComment(owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error)
-	GetLabel(owner string, repo string, name string) (*github.Label, *github.Response, error)
-	ListLabelsByIssue(owner string, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error)
-	RemoveLabelForIssue(owner string, repo string, number int, label string) (*github.Response, error)
+	AddLabelsToIssue(ctx context.Context, owner string, repo string, number int, labels []string) ([]*github.Label, *github.Response, error)
+	CreateComment(ctx context.Context, owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error)
+	GetLabel(ctx context.Context, owner string, repo string, name string) (*github.Label, *github.Response, error)
+	ListLabelsByIssue(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error)
+	RemoveLabelForIssue(ctx context.Context, owner string, repo string, number int, label string) (*github.Response, error)
 }
 
 // PullRequestsService is the subset of `github.PullRequestsService` used by
 // this module.
 type PullRequestsService interface {
-	List(owner string, repo string, opt *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error)
-	ListCommits(owner string, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
+	List(ctx context.Context, owner string, repo string, opt *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error)
+	ListCommits(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 }
 
 // GitHubClient provides an interface to the GitHub APIs used in this module.
@@ -89,15 +90,15 @@ func NewClient(tc *http.Client) *GitHubClient {
 
 // GetAllRepos retrieves either a single repository (if `repoName` is non-empty)
 // or all repositories in an organization of `repoName` is empty.
-func (ghc *GitHubClient) GetAllRepos(orgName string, repoName string) []*github.Repository {
+func (ghc *GitHubClient) GetAllRepos(ctx context.Context, orgName string, repoName string) []*github.Repository {
 	if repoName == "" {
-		repos, _, err := ghc.Repositories.List(orgName, nil)
+		repos, _, err := ghc.Repositories.List(ctx, orgName, nil)
 		if err != nil {
 			logging.Fatalf("Error listing all repos in org %s: %s", orgName, err)
 		}
 		return repos
 	}
-	repo, _, err := ghc.Repositories.Get(orgName, repoName)
+	repo, _, err := ghc.Repositories.Get(ctx, orgName, repoName)
 	if err != nil {
 		logging.Fatalf("Error looking up %s/%s: %s", orgName, repoName, err)
 	}
@@ -106,12 +107,12 @@ func (ghc *GitHubClient) GetAllRepos(orgName string, repoName string) []*github.
 
 // VerifyRepoHasClaLabels checks whether the given GitHub repo has the
 // CLA-related labels defined.
-func (ghc *GitHubClient) VerifyRepoHasClaLabels(orgName string, repoName string) bool {
+func (ghc *GitHubClient) VerifyRepoHasClaLabels(ctx context.Context, orgName string, repoName string) bool {
 	// Verify that the repo has [cla: yes] and [cla: no] labels.
 	repoHasClaLabels := true
 
 	for _, labelName := range []string{LabelClaYes, LabelClaNo} {
-		label, _, err := ghc.Issues.GetLabel(orgName, repoName, labelName)
+		label, _, err := ghc.Issues.GetLabel(ctx, orgName, repoName, labelName)
 		if err != nil {
 			repoHasClaLabels = false
 			logging.Errorf("Error getting info on label '%s' for repo '%s/%s': %s", labelName, orgName, repoName, err)
@@ -127,10 +128,10 @@ func (ghc *GitHubClient) VerifyRepoHasClaLabels(orgName string, repoName string)
 // ProcessOrgRepo handles all PRs in specified repos in the organization or user
 // account. If `repoName` is empty, it processes all repos, if `repoName` is
 // non-empty, it processes the specified repo.
-func (ghc *GitHubClient) ProcessOrgRepo(repoSpec GitHubProcessSpec, claSigners config.ClaSigners) {
+func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProcessSpec, claSigners config.ClaSigners) {
 	// Retrieve all repositories for the given organization or user.
 	orgName := repoSpec.Org
-	repos := ghc.GetAllRepos(orgName, repoSpec.Repo)
+	repos := ghc.GetAllRepos(ctx, orgName, repoSpec.Repo)
 
 	// For repository, find all outstanding (non-closed / non-merged PRs)
 	for _, repo := range repos {
@@ -138,10 +139,10 @@ func (ghc *GitHubClient) ProcessOrgRepo(repoSpec GitHubProcessSpec, claSigners c
 
 		logging.Infof("Repo: %s/%s", orgName, repoName)
 
-		repoHasClaLabels := ghc.VerifyRepoHasClaLabels(orgName, repoName)
+		repoHasClaLabels := ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName)
 
 		// Find all pull requests.
-		pulls, _, err := ghc.PullRequests.List(orgName, repoName, nil)
+		pulls, _, err := ghc.PullRequests.List(ctx, orgName, repoName, nil)
 		if err != nil {
 			logging.Fatalf("Error listing pull requests for %s/%s: %s", orgName, repoName, err)
 		}
@@ -150,7 +151,7 @@ func (ghc *GitHubClient) ProcessOrgRepo(repoSpec GitHubProcessSpec, claSigners c
 		for _, pull := range pulls {
 			logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
 			// List all commits for this PR
-			commits, _, err := ghc.PullRequests.ListCommits(orgName, repoName, *pull.Number, nil)
+			commits, _, err := ghc.PullRequests.ListCommits(ctx, orgName, repoName, *pull.Number, nil)
 			if err != nil {
 				logging.Error("Error finding all commits on PR", pull.Number)
 				continue
@@ -294,7 +295,7 @@ func (ghc *GitHubClient) ProcessOrgRepo(repoSpec GitHubProcessSpec, claSigners c
 
 			if repoHasClaLabels {
 				// Get the current set of labels on the PR.
-				labels, _, err := ghc.Issues.ListLabelsByIssue(orgName, repoName, *pull.Number, nil)
+				labels, _, err := ghc.Issues.ListLabelsByIssue(ctx, orgName, repoName, *pull.Number, nil)
 				if err != nil {
 					logging.Errorf("Error listing labels for repo '%s/%s, PR %d: %v", orgName, repoName, *pull.Number, err)
 				}
@@ -312,7 +313,7 @@ func (ghc *GitHubClient) ProcessOrgRepo(repoSpec GitHubProcessSpec, claSigners c
 				addLabel := func(label string) {
 					logging.Infof("  Adding label [%s] to repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
 					if repoSpec.UpdateRepo {
-						_, _, err := ghc.Issues.AddLabelsToIssue(orgName, repoName, *pull.Number, []string{label})
+						_, _, err := ghc.Issues.AddLabelsToIssue(ctx, orgName, repoName, *pull.Number, []string{label})
 						if err != nil {
 							logging.Errorf("Error adding label [%s] to repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
 						}
@@ -324,7 +325,7 @@ func (ghc *GitHubClient) ProcessOrgRepo(repoSpec GitHubProcessSpec, claSigners c
 				removeLabel := func(label string) {
 					logging.Infof("  Removing label [%s] from repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
 					if repoSpec.UpdateRepo {
-						_, err := ghc.Issues.RemoveLabelForIssue(orgName, repoName, *pull.Number, label)
+						_, err := ghc.Issues.RemoveLabelForIssue(ctx, orgName, repoName, *pull.Number, label)
 						if err != nil {
 							logging.Errorf("  Error removing label [%s] from repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
 						}
@@ -339,7 +340,7 @@ func (ghc *GitHubClient) ProcessOrgRepo(repoSpec GitHubProcessSpec, claSigners c
 						issueComment := github.IssueComment{
 							Body: &comment,
 						}
-						_, _, err := ghc.Issues.CreateComment(orgName, repoName, *pull.Number, &issueComment)
+						_, _, err := ghc.Issues.CreateComment(ctx, orgName, repoName, *pull.Number, &issueComment)
 						if err != nil {
 							logging.Errorf("  Error leaving comment on PR %d: %v", *pull.Number, err)
 						}

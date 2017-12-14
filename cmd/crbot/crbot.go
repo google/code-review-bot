@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"strconv"
 	"strings"
@@ -64,11 +65,13 @@ func main() {
 		}
 	}
 
+	ctx := context.Background()
+
 	// Configure authentication and connet to GitHub.
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: cfg.Auth},
 	)
-	tc := oauth2.NewClient(oauth2.NoContext, ts)
+	tc := oauth2.NewClient(ctx, ts)
 
 	// Process org and repo(s) specified on the command-line.
 	ghc := ghutil.NewClient(tc)
@@ -78,5 +81,5 @@ func main() {
 		Pulls:      prNumbers,
 		UpdateRepo: *updateRepoFlag,
 	}
-	ghc.ProcessOrgRepo(repoSpec, claSigners)
+	ghc.ProcessOrgRepo(ctx, repoSpec, claSigners)
 }
