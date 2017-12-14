@@ -92,8 +92,8 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 	defer tearDown(t)
 
 	expectedRepos := []*github.Repository{
-		&github.Repository{},
-		&github.Repository{},
+		{},
+		{},
 	}
 
 	mockGhc.Repositories.EXPECT().List(orgName, nil).Return(expectedRepos, nil, nil)
