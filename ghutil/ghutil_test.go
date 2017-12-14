@@ -60,7 +60,6 @@ var (
 const (
 	orgName   = "org"
 	repoName  = "repo"
-	emptyRepo = ""
 )
 
 func setUp(t *testing.T) {
