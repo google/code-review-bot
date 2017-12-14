@@ -68,7 +68,7 @@ func setUp(t *testing.T) {
 	mockGhc = NewMockGitHubClient(ghc, ctrl)
 }
 
-func tearDown(t *testing.T) {
+func tearDown(_ *testing.T) {
 	ctrl.Finish()
 }
 
