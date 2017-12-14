@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/go-yaml/yaml"
+
 	"github.com/google/code-review-bot/logging"
 )
 

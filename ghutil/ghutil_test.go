@@ -18,9 +18,9 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/go-github/github"
 
 	"github.com/google/code-review-bot/ghutil"
+	"github.com/google/go-github/github"
 )
 
 type MockGitHubClient struct {
