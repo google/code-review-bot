@@ -26,9 +26,9 @@ declare -i num_files_failed=0
 
 for gosrc in `find . -name \*\.go`; do
   if [[ "${VERBOSE}" -eq 1 ]]; then
-    diff -u "${gosrc}" <(gofmt "${gosrc}")
+    diff -u "${gosrc}" <(gofmt -s "${gosrc}")
   else
-    diff -u "${gosrc}" <(gofmt "${gosrc}") > /dev/null 2>&1
+    diff -u "${gosrc}" <(gofmt -s "${gosrc}") > /dev/null 2>&1
   fi
   local_status=$?
   if [[ ${local_status} != 0 ]]; then
