@@ -1,5 +1,10 @@
 # Code Review Bot
 
+[![Build Status][travis-shield]][travis-link]
+
+[travis-shield]: https://travis-ci.org/google/code-review-bot.svg?branch=master
+[travis-link]: https://travis-ci.org/google/code-review-bot
+
 ## Usage
 
 First, ensure that you have installed Go and set up `$GOPATH`. Then, build the
