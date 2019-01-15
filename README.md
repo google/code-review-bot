@@ -48,6 +48,24 @@ This specific version of both `gomock` and `mockgen` tools is what's used in
 this repo, and tests will fail if your version of these tools generates
 different code, including comments.
 
+To update the versions of these tools used in this repo:
+
+1. update the version numbers in this file (above) and in
+   [`.travis.yml`](.travis.yml) to match
+1. run the commands above to get those specific versions of the tools
+1. update the generated code in this repo via:
+
+   ```bash
+   $ cd ghutil
+   $ rm -f mock_ghutil.go
+   $ make mock
+   ```
+
+1. [run the tests](#testing) from the top-level of the tree
+1. commit your changes to this file (`README.md`), `.travis.yml`, and
+   `ghutil/mock_ghutil.go` and make sure the build passes on Travis CI before
+   merging the change
+
 ## Testing
 
 Just what you might expect:
