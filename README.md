@@ -41,9 +41,13 @@ And then to use it:
 Install [GoMock](https://github.com/golang/mock):
 
 ```bash
-$ go get github.com/golang/mock/gomock
-$ go get github.com/golang/mock/mockgen
+$ go get github.com/golang/mock/gomock@v1.2.0
+$ go get github.com/golang/mock/mockgen@v1.2.0
 ```
+
+This specific version of both `gomock` and `mockgen` tools is what's used in
+this repo, and tests will fail if your version of these tools generates
+different code, including comments.
 
 ## Testing
 
