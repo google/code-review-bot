@@ -1,9 +1,12 @@
 # Code Review Bot
 
-[![Build Status][travis-shield]][travis-link]
+[![Build Status][travis-badge]][travis-url]
+[![Go Report Card][go-report-card-badge]][go-report-card-url]
 
-[travis-shield]: https://travis-ci.org/google/code-review-bot.svg?branch=master
-[travis-link]: https://travis-ci.org/google/code-review-bot
+[travis-badge]: https://travis-ci.org/google/code-review-bot.svg?branch=master
+[travis-url]: https://travis-ci.org/google/code-review-bot
+[go-report-card-badge]: https://goreportcard.com/badge/github.com/google/code-review-bot
+[go-report-card-url]: https://goreportcard.com/report/github.com/google/code-review-bot
 
 ## Prerequisites
 
