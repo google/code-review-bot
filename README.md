@@ -5,38 +5,37 @@
 [travis-shield]: https://travis-ci.org/google/code-review-bot.svg?branch=master
 [travis-link]: https://travis-ci.org/google/code-review-bot
 
-## Usage
+## Prerequisites
 
-First, ensure that you have installed Go and set up `$GOPATH`. Then, build the
-`crbot` tool:
+First, ensure that you have installed Go 1.11 or higher since we need the
+support for [Go modules via `go
+mod`](https://github.com/golang/go/wiki/Modules).
 
-* from scratch:
+On Travis CI, we also define the env var `GO111MODULE=on` to override the [Go
+1.5 `vendor` experiment](http://golang.org/s/go15vendor); you may not
+necessarily need this setting in your environment if you don't have Go 1.5
+`vendor` experiment also enabled.
 
-   ```bash
-   $ go get github.com/google/code-review-bot/cmd/crbot
-   ```
+## Building
 
-* or, from a cloned copy:
+To `crbot` tool without a cloned repo (assuming that `$GOPATH/bin` is in your
+`$PATH`):
 
-   ```bash
-   $ go get ./...
-   ```
+```bash
+$ go get github.com/google/code-review-bot/cmd/crbot
+$ crbot [options]
+```
 
-And then to use it:
+Or, from a cloned copy:
 
-* if `$GOPATH/bin` is in your `$PATH`:
+```bash
+$ git clone https://github.com/google/code-review-bot.git
+$ cd code-review-bot
+$ go build ./cmd/crbot
+$ ./crbot [options]
+```
 
-   ```bash
-   $ crbot [options]
-   ```
-
-* or, from a cloned repo:
-
-   ```bash
-   $ cmd/crbot/crbot [options]
-   ```
-
-## Development
+## Developing
 
 Install [GoMock](https://github.com/golang/mock):
 
