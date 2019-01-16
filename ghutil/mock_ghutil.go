@@ -21,7 +21,7 @@ package ghutil
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	github "github.com/google/go-github/github"
+	github "github.com/google/go-github/v21/github"
 	reflect "reflect"
 )
 

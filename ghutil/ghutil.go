@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v21/github"
 
 	"github.com/google/code-review-bot/config"
 	"github.com/google/code-review-bot/logging"
