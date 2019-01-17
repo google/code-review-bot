@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/go-yaml/yaml"
+
 	"github.com/google/code-review-bot/logging"
 )
 
@@ -60,7 +61,7 @@ func ParseConfig(filename string) Config {
 	} else if strings.HasSuffix(filename, ".yaml") || strings.HasSuffix(filename, ".yml") {
 		err = yaml.Unmarshal(fileContents, &config)
 	} else {
-		err = errors.New("Unrecognized file type")
+		err = errors.New("unrecognized file type")
 	}
 
 	if err != nil {
@@ -82,7 +83,7 @@ func ParseClaSigners(filename string) ClaSigners {
 	} else if strings.HasSuffix(filename, ".yaml") || strings.HasSuffix(filename, ".yml") {
 		err = yaml.Unmarshal(fileContents, &claSigners)
 	} else {
-		err = errors.New("Unrecognized file type")
+		err = errors.New("unrecognized file type")
 	}
 
 	if err != nil {
