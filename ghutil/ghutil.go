@@ -25,6 +25,8 @@ import (
 	"github.com/google/code-review-bot/logging"
 )
 
+// The `[cla: yes]` and `[cla: no]` labels we expect to be predefined on a
+// given repository.
 const (
 	LabelClaYes = "cla: yes"
 	LabelClaNo  = "cla: no"
@@ -66,6 +68,9 @@ type GitHubClient struct {
 	PullRequests  PullRequestsService
 }
 
+// GitHubProcessSpec is the specification of the work to be done: for a single
+// organization and repo, the set of pull requests that need to be processed and
+// whether or not this tool should mutate the repo state.
 type GitHubProcessSpec struct {
 	Org        string
 	Repo       string
