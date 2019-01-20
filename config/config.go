@@ -25,30 +25,41 @@ import (
 	"github.com/google/code-review-bot/logging"
 )
 
+// Config is the configuration for the `crbot` tool to specify the
+// authentication it should use and the scope at which it should run, whether
+// for all repos in a single organization, or a single specific repo.
 type Config struct {
 	Auth string `json:"auth" yaml:"auth"`
 	Org  string `json:"org,omitempty" yaml:"org,omitempty"`
 	Repo string `json:"repo,omitempty" yaml:"repo,omitempty"`
 }
 
+// Account represents a single user record, whether human or a bot, with a name,
+// email, and GitHub login.
 type Account struct {
 	Name  string `json:"name" yaml:"name"`
 	Email string `json:"email" yaml:"email"`
 	Login string `json:"github" yaml:"github"`
 }
 
+// Company represents a company record with a name, (optional) domain name(s),
+// and user accounts.
 type Company struct {
 	Name    string    `json:"name" yaml:"name"`
 	Domains []string  `json:"domains,omitempty" yaml:"domains,omitempty"`
 	People  []Account `json:"people" yaml:"people"`
 }
 
+// ClaSigners provides the overall structure of the CLA config: individual CLA
+// signers, bots, and corporate CLA signers.
 type ClaSigners struct {
 	People    []Account `json:"people,omitempty" yaml:"people,omitempty"`
 	Bots      []Account `json:"bots,omitempty" yaml:"bots,omitempty"`
 	Companies []Company `json:"companies,omitempty" yaml:"companies,omitempty"`
 }
 
+// ParseConfig parses the config from a YAML or JSON file and returns a `Config`
+// object.
 func ParseConfig(filename string) Config {
 	fileContents, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -71,6 +82,8 @@ func ParseConfig(filename string) Config {
 	return config
 }
 
+// ParseClaSigners parses the CLA signers config from a YAML or JSON file and
+// returns a `ClaSigners` object.
 func ParseClaSigners(filename string) ClaSigners {
 	fileContents, err := ioutil.ReadFile(filename)
 	if err != nil {

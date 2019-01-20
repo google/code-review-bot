@@ -20,26 +20,32 @@ import (
 	"os"
 )
 
+// Errorf outputs an error log line with a formatting string.
 func Errorf(format string, a ...interface{}) (int, error) {
 	return fmt.Fprintf(os.Stderr, format+"\n", a...)
 }
 
+// Error outputs an error log line without a formatting string.
 func Error(a ...interface{}) (int, error) {
 	return fmt.Fprintln(os.Stderr, a...)
 }
 
-func Info(a ...interface{}) (int, error) {
-	return fmt.Println(a...)
-}
-
+// Infof outputs an info log line with a formatting string.
 func Infof(format string, a ...interface{}) (int, error) {
 	return fmt.Printf(format+"\n", a...)
 }
 
-func Fatal(a ...interface{}) {
-	log.Fatal(a...)
+// Info outputs an info log line without a formatting string.
+func Info(a ...interface{}) (int, error) {
+	return fmt.Println(a...)
 }
 
+// Fatalf outputs a fatal log line with a formatting string.
 func Fatalf(format string, a ...interface{}) {
 	log.Fatalf(format+"\n", a...)
+}
+
+// Fatal outputs a fatal log line without a formatting string.
+func Fatal(a ...interface{}) {
+	log.Fatal(a...)
 }
