@@ -25,8 +25,9 @@ $(MOCK): $(SRC) $(HEADER)
 	$(VERB) (cat $(HEADER) && mockgen -source $(SRC) -package ghutil) > $(MOCK)
 
 test:
-	$(VERB) echo "mockgen diff test (if no output, then ok)"
+	$(VERB) echo "Running mockgen diff test ..."
 	$(VERB) (cat $(HEADER) && mockgen -source $(SRC) -package ghutil) | diff -u $(MOCK) -
+	$(VERB) echo "PASSED"
 
 clean:
 	$(VERB) rm -f $(MOCK)
