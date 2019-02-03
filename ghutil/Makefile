@@ -22,9 +22,11 @@ HEADER = mock_header.txt
 mock: $(MOCK)
 
 $(MOCK): $(SRC) $(HEADER)
-	$(VERB) cat $(HEADER) > $(MOCK)
-	$(VERB) mockgen -source $(SRC) -package ghutil >> $(MOCK)
+	$(VERB) (cat $(HEADER) && mockgen -source $(SRC) -package ghutil) > $(MOCK)
 
 test:
 	$(VERB) echo "mockgen diff test (if no output, then ok)"
 	$(VERB) (cat $(HEADER) && mockgen -source $(SRC) -package ghutil) | diff -u $(MOCK) -
+
+clean:
+	$(VERB) rm -f $(MOCK)
