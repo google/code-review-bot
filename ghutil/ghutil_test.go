@@ -20,6 +20,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	"github.com/google/code-review-bot/config"
 	"github.com/google/code-review-bot/ghutil"
 	"github.com/google/go-github/v21/github"
 )
@@ -169,6 +170,58 @@ func TestVerifyRepoHasClaLabels_YesAndNoLabels(t *testing.T) {
 
 	if !ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName) {
 		t.Log("Should have returned true")
+		t.Fail()
+	}
+}
+
+func TestMatchAccount_MatchesCase(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	// Credentials as provided by the user.
+	account := config.Account{
+		Name:  "Jane Doe",
+		Email: "jane@example.com",
+		Login: "JaneDoe",
+	}
+
+	// CLA as configured by the project.
+	accounts := []config.Account{
+		{
+			Name:  "Jane Doe",
+			Email: "jane@example.com",
+			Login: "JaneDoe",
+		},
+	}
+
+	if !ghutil.MatchAccount(account, accounts) {
+		t.Log("Should have returned true")
+		t.Fail()
+	}
+}
+
+func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	// Credentials as provided by the user.
+	account := config.Account{
+		Name:  "Jane Doe",
+		Email: "Jane@example.com",
+		Login: "janedoe",
+	}
+
+	// CLA as configured by the project.
+	accounts := []config.Account{
+		{
+			Name:  "Jane Doe",
+			Email: "jane@example.com",
+			Login: "JaneDoe",
+		},
+	}
+
+	if ghutil.MatchAccount(account, accounts) {
+		t.Log("Should have returned false")
 		t.Fail()
 	}
 }

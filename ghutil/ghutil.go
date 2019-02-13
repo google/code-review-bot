@@ -130,6 +130,18 @@ func (ghc *GitHubClient) VerifyRepoHasClaLabels(ctx context.Context, orgName str
 	return repoHasClaLabels
 }
 
+// MatchAccount returns whether the provided account matches any of the accounts
+// in the passed-in configuration for enforcing the CLA.
+func MatchAccount(account config.Account, accounts []config.Account) bool {
+	for _, account2 := range accounts {
+		if account.Name == account2.Name && account.Email == account2.Email &&
+			account.Login == account2.Login {
+			return true
+		}
+	}
+	return false
+}
+
 // ProcessOrgRepo handles all PRs in specified repos in the organization or user
 // account. If `repoName` is empty, it processes all repos, if `repoName` is
 // non-empty, it processes the specified repo.
@@ -237,16 +249,6 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 					authorClaMatchFound := false
 					committerClaMatchFound := false
 
-					matchAccount := func(account config.Account, accounts []config.Account) bool {
-						for _, account2 := range accounts {
-							if account.Name == account2.Name && account.Email == account2.Email &&
-								account.Login == account2.Login {
-								return true
-							}
-						}
-						return false
-					}
-
 					author := config.Account{
 						Name:  authorName,
 						Email: authorEmail,
@@ -259,13 +261,13 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 						Login: committerLogin,
 					}
 
-					authorClaMatchFound = authorClaMatchFound || matchAccount(author, claSigners.People)
-					committerClaMatchFound = committerClaMatchFound || matchAccount(committer, claSigners.People)
-					committerClaMatchFound = committerClaMatchFound || matchAccount(committer, claSigners.Bots)
+					authorClaMatchFound = authorClaMatchFound || MatchAccount(author, claSigners.People)
+					committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, claSigners.People)
+					committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, claSigners.Bots)
 
 					for _, company := range claSigners.Companies {
-						authorClaMatchFound = authorClaMatchFound || matchAccount(author, company.People)
-						committerClaMatchFound = committerClaMatchFound || matchAccount(committer, company.People)
+						authorClaMatchFound = authorClaMatchFound || MatchAccount(author, company.People)
+						committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, company.People)
 					}
 
 					if !authorClaMatchFound {
