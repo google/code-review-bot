@@ -134,8 +134,9 @@ func (ghc *GitHubClient) VerifyRepoHasClaLabels(ctx context.Context, orgName str
 // in the passed-in configuration for enforcing the CLA.
 func MatchAccount(account config.Account, accounts []config.Account) bool {
 	for _, account2 := range accounts {
-		if account.Name == account2.Name && account.Email == account2.Email &&
-			account.Login == account2.Login {
+		if account.Name == account2.Name &&
+			strings.EqualFold(account.Email, account2.Email) &&
+			strings.EqualFold(account.Login, account2.Login) {
 			return true
 		}
 	}

@@ -220,8 +220,8 @@ func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
 		},
 	}
 
-	if ghutil.MatchAccount(account, accounts) {
-		t.Log("Should have returned false")
+	if !ghutil.MatchAccount(account, accounts) {
+		t.Log("Should have returned true")
 		t.Fail()
 	}
 }
