@@ -52,6 +52,12 @@ func main() {
 		logging.Fatalf("-org must be non-empty or `org` must be specified in cfg file")
 	}
 
+	// Get the repo name from command-line flags or config file.
+	repoName := *repoFlag
+	if repoName == "" {
+		repoName = cfg.Repo
+	}
+
 	prNumbers := make([]uint64, 0)
 	if *prFlag != "" {
 		prElements := strings.Split(*prFlag, ",")
@@ -77,7 +83,7 @@ func main() {
 	ghc := ghutil.NewClient(tc)
 	repoSpec := ghutil.GitHubProcessSpec{
 		Org:        orgName,
-		Repo:       *repoFlag,
+		Repo:       repoName,
 		Pulls:      prNumbers,
 		UpdateRepo: *updateRepoFlag,
 	}
