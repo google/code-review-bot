@@ -147,6 +147,124 @@ func MatchAccount(account config.Account, accounts []config.Account) bool {
 	return false
 }
 
+// ProcessCommit processes a single commit and returns compliance status and
+// failure reason, if any.
+func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners) (commitIsCompliant bool, commitNonComplianceReason string) {
+	logging.Infof("  - commit: %s", *commit.SHA)
+
+	commitIsCompliant = true
+
+	var authorName, authorEmail, authorLogin string
+	var committerName, committerEmail, committerLogin string
+
+	// Per go-github project docs in `github/repos_commits.go`:
+	//
+	// > RepositoryCommit represents a commit in a repo.
+	// > Note that it's wrapping a Commit, so author/committer information is
+	// > in two places, but contain different details about them: in RepositoryCommit "github
+	// > details", in Commit - "git details".
+
+	// Only GitHub information can be found here (username only).
+	if commit.Author != nil {
+		if commit.Author.Login != nil {
+			authorLogin = *commit.Author.Login
+		}
+	}
+
+	// Only GitHub information can be found here (username only).
+	if commit.Committer != nil {
+		if commit.Committer.Login != nil {
+			committerLogin = *commit.Committer.Login
+		}
+	}
+
+	// Only Git information can be found here (name and email only).
+	if commit.Commit != nil {
+		if commit.Commit.Author != nil {
+			commitAuthor := commit.Commit.Author
+			if commitAuthor.Name != nil {
+				authorName = *commitAuthor.Name
+			}
+			if commitAuthor.Email != nil {
+				authorEmail = *commitAuthor.Email
+			}
+		}
+
+		if commit.Commit.Committer != nil {
+			commitCommitter := commit.Commit.Committer
+			if commitCommitter.Name != nil {
+				committerName = *commitCommitter.Name
+			}
+			if commitCommitter.Email != nil {
+				committerEmail = *commitCommitter.Email
+			}
+		}
+	}
+
+	if authorName == "" || authorEmail == "" || authorLogin == "" {
+		commitIsCompliant = false
+		commitNonComplianceReason = "Please verify the author name, email, and GitHub username association are all correct and match CLA records."
+	}
+
+	if committerName == "" || committerEmail == "" || committerLogin == "" {
+		commitIsCompliant = false
+		commitNonComplianceReason = "Please verify the committer name, email, and GitHub username association are all correct and match CLA records."
+	}
+
+	// Assuming the commit is compliant thus far, verify that both the author
+	// and committer (which could be the same person) have signed the CLA.
+	if commitIsCompliant {
+		authorClaMatchFound := false
+		committerClaMatchFound := false
+
+		matchAccount := func(account config.Account, accounts []config.Account) bool {
+			for _, account2 := range accounts {
+				if account.Name == account2.Name && account.Email == account2.Email &&
+					account.Login == account2.Login {
+					return true
+				}
+			}
+			return false
+		}
+
+		author := config.Account{
+			Name:  authorName,
+			Email: authorEmail,
+			Login: authorLogin,
+		}
+
+		committer := config.Account{
+			Name:  committerName,
+			Email: committerEmail,
+			Login: committerLogin,
+		}
+
+		authorClaMatchFound = authorClaMatchFound || matchAccount(author, claSigners.People)
+		committerClaMatchFound = committerClaMatchFound || matchAccount(committer, claSigners.People)
+		committerClaMatchFound = committerClaMatchFound || matchAccount(committer, claSigners.Bots)
+
+		for _, company := range claSigners.Companies {
+			authorClaMatchFound = authorClaMatchFound || matchAccount(author, company.People)
+			committerClaMatchFound = committerClaMatchFound || matchAccount(committer, company.People)
+		}
+
+		if !authorClaMatchFound {
+			commitNonComplianceReason = "Author of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
+		}
+
+		if !committerClaMatchFound {
+			commitNonComplianceReason = "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
+		}
+
+		commitIsCompliant = commitIsCompliant && authorClaMatchFound && committerClaMatchFound
+	}
+
+	// Put it all together now for display.
+	logging.Infof("    author: %s <%s>, GitHub: %s", authorName, authorEmail, authorLogin)
+	logging.Infof("    committer: %s <%s>, GitHub: %s", committerName, committerEmail, committerLogin)
+	return
+}
+
 // ProcessOrgRepo handles all PRs in specified repos in the organization or user
 // account. If `repoName` is empty, it processes all repos, if `repoName` is
 // non-empty, it processes the specified repo.
@@ -185,110 +303,7 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 			var pullRequestNonComplianceReason string
 
 			for _, commit := range commits {
-				// Start off assuming that the commit is compliant, and verify it.
-				commitIsCompliant := true
-				var commitNonComplianceReason string
-
-				logging.Infof("  - commit: %s", *commit.SHA)
-
-				var authorName, authorEmail, authorLogin string
-				var committerName, committerEmail, committerLogin string
-
-				// Per go-github project docs in `github/repos_commits.go`:
-				//
-				// > RepositoryCommit represents a commit in a repo.
-				// > Note that it's wrapping a Commit, so author/committer information is
-				// > in two places, but contain different details about them: in RepositoryCommit "github
-				// > details", in Commit - "git details".
-
-				// Only GitHub information can be found here (username only).
-				if commit.Author != nil {
-					if commit.Author.Login != nil {
-						authorLogin = *commit.Author.Login
-					}
-				}
-
-				// Only GitHub information can be found here (username only).
-				if commit.Committer != nil {
-					if commit.Committer.Login != nil {
-						committerLogin = *commit.Committer.Login
-					}
-				}
-
-				// Only Git information can be found here (name and email only).
-				if commit.Commit != nil {
-					if commit.Commit.Author != nil {
-						commitAuthor := commit.Commit.Author
-						if commitAuthor.Name != nil {
-							authorName = *commitAuthor.Name
-						}
-						if commitAuthor.Email != nil {
-							authorEmail = *commitAuthor.Email
-						}
-					}
-
-					if commit.Commit.Committer != nil {
-						commitCommitter := commit.Commit.Committer
-						if commitCommitter.Name != nil {
-							committerName = *commitCommitter.Name
-						}
-						if commitCommitter.Email != nil {
-							committerEmail = *commitCommitter.Email
-						}
-					}
-				}
-
-				if authorName == "" || authorEmail == "" || authorLogin == "" {
-					commitIsCompliant = false
-					commitNonComplianceReason = "Please verify the author name, email, and GitHub username association are all correct and match CLA records."
-				}
-
-				if committerName == "" || committerEmail == "" || committerLogin == "" {
-					commitIsCompliant = false
-					commitNonComplianceReason = "Please verify the committer name, email, and GitHub username association are all correct and match CLA records."
-				}
-
-				// Assuming the commit is compliant thus far, verify that both the author
-				// and committer (which could be the same person) have signed the CLA.
-				if commitIsCompliant {
-					authorClaMatchFound := false
-					committerClaMatchFound := false
-
-					author := config.Account{
-						Name:  authorName,
-						Email: authorEmail,
-						Login: authorLogin,
-					}
-
-					committer := config.Account{
-						Name:  committerName,
-						Email: committerEmail,
-						Login: committerLogin,
-					}
-
-					authorClaMatchFound = authorClaMatchFound || MatchAccount(author, claSigners.People)
-					committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, claSigners.People)
-					committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, claSigners.Bots)
-
-					for _, company := range claSigners.Companies {
-						authorClaMatchFound = authorClaMatchFound || MatchAccount(author, company.People)
-						committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, company.People)
-					}
-
-					if !authorClaMatchFound {
-						commitNonComplianceReason = "Author of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
-					}
-
-					if !committerClaMatchFound {
-						commitNonComplianceReason = "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
-					}
-
-					commitIsCompliant = commitIsCompliant && authorClaMatchFound && committerClaMatchFound
-				}
-
-				// Put it all together now for display.
-				logging.Infof("    author: %s <%s>, GitHub: %s", authorName, authorEmail, authorLogin)
-				logging.Infof("    committer: %s <%s>, GitHub: %s", committerName, committerEmail, committerLogin)
+				commitIsCompliant, commitNonComplianceReason := ProcessCommit(commit, claSigners)
 
 				if commitIsCompliant {
 					logging.Info("    compliant: true")

@@ -222,6 +222,63 @@ func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
 
 	if !ghutil.MatchAccount(account, accounts) {
 		t.Log("Should have returned true")
+	}
+}
+
+func TestDifferentAuthorAndCommitter(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	sha := "12345abcde"
+	name := "John Doe"
+	corporateEmail := "john@github.com"
+	personalEmail := "john@gmail.com"
+	login := "johndoe"
+
+	claSigners := config.ClaSigners{
+		Companies: []config.Company{
+			{
+				Name: "Acme Inc.",
+				People: []config.Account{
+					{
+						// Corporate account
+						Name:  name,
+						Email: corporateEmail,
+						Login: login,
+					},
+					{
+						// Personal account
+						Name:  name,
+						Email: personalEmail,
+						Login: login,
+					},
+				},
+			},
+		},
+	}
+	commit := github.RepositoryCommit{
+		SHA: &sha,
+		Commit: &github.Commit{
+			Author: &github.CommitAuthor{
+				Name:  &name,
+				Email: &corporateEmail,
+			},
+			Committer: &github.CommitAuthor{
+				Name:  &name,
+				Email: &personalEmail,
+			},
+		},
+		Author: &github.User{
+			Login: &login,
+		},
+		Committer: &github.User{
+			Login: &login,
+		},
+	}
+
+	commitIsCompliant, commitNonComplianceReason := ghutil.ProcessCommit(&commit, claSigners)
+	if !commitIsCompliant {
+		t.Log("Commit should have been marked compliant; reason: ", commitNonComplianceReason)
 		t.Fail()
 	}
 }
