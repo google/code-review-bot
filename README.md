@@ -24,15 +24,15 @@ necessarily need this setting in your environment if you don't have Go 1.5
 
 ## Building
 
-To `crbot` tool without a cloned repo (assuming that `$GOPATH/bin` is in your
-`$PATH`):
+To build the `crbot` tool without a cloned repo (assuming that `$GOPATH/bin` is
+in your `$PATH`):
 
 ```bash
 $ go get github.com/google/code-review-bot/cmd/crbot
 $ crbot [options]
 ```
 
-Or, from a cloned copy:
+Or, from a cloned repo:
 
 ```bash
 $ git clone https://github.com/google/code-review-bot.git
