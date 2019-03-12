@@ -30,4 +30,8 @@ ghutil_test:
 	$(VERB) echo "Running tests in 'ghutil' recursively ..."
 	$(VERB) $(MAKE) VERBOSE=$(VERBOSE) -s -C ghutil test
 
-test: go_test gofmt_test ghutil_test
+go_mod_tidy_test:
+	$(VERB) echo "Running 'go mod tidy' test ..."
+	$(VERB) ./go_mod_tidy_test.sh
+
+test: go_test gofmt_test ghutil_test go_mod_tidy_test
