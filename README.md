@@ -50,27 +50,26 @@ $ go get github.com/golang/mock/gomock@v1.2.0
 $ go get github.com/golang/mock/mockgen@v1.2.0
 ```
 
+Generate the mocks:
+
+```bash
+$ go generate ./...
+```
+
 This specific version of both `gomock` and `mockgen` tools is what's used in
 this repo, and tests will fail if your version of these tools generates
 different code, including comments.
 
 To update the versions of these tools used in this repo:
 
-1. update the version numbers in this file (above) and in
-   [`.travis.yml`](.travis.yml) to match
-1. run the commands above to get those specific versions of the tools
-1. update the generated code in this repo via:
-
-   ```bash
-   $ cd ghutil
-   $ rm -f mock_ghutil.go
-   $ make mock
-   ```
-
+1. update the version numbers in this file (above) as well as in
+   [`.travis.yml`](.travis.yml) and [`go.mod`](go.mod) to match
+1. run `go mod tidy` to update the `go.sum` file
+1. run the updated `go get` commands above to get newer versions of the tools
+1. run the `go generate` command above to regenerate the mocks
 1. [run the tests](#testing) from the top-level of the tree
-1. commit your changes to this file (`README.md`), `.travis.yml`, and
-   `ghutil/mock_ghutil.go` and make sure the build passes on Travis CI before
-   merging the change
+1. commit your changes to this file (`README.md`) and `.travis.yml`, making
+   sure that the build passes on Travis CI before merging the change
 
 ## Testing
 
