@@ -15,11 +15,19 @@
 LEVEL = .
 include $(LEVEL)/common.mk
 
-gofmt_test:
+go_test:
+	$(VERB) echo
 	$(VERB) echo "Running tests via 'go test' ..."
-	$(VERB) go test ./...
+	$(VERB) go test -v ./...
+
+gofmt_test:
+	$(VERB) echo
 	$(VERB) echo "Running 'go fmt' test ..."
 	$(VERB) ./gofmt_test.sh
 
-test: gofmt_test
+ghutil_test:
+	$(VERB) echo
+	$(VERB) echo "Running tests in 'ghutil' recursively ..."
 	$(VERB) $(MAKE) VERBOSE=$(VERBOSE) -s -C ghutil test
+
+test: go_test gofmt_test ghutil_test
