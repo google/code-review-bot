@@ -20,6 +20,7 @@ package ghutil
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -134,12 +135,29 @@ func (ghc *GitHubClient) VerifyRepoHasClaLabels(ctx context.Context, orgName str
 	return repoHasClaLabels
 }
 
+// CanonicalizeEmail returns a canonical version of the email address. For all
+// addresses, it will lowercase the email. For Gmail addresses, it will also
+// remove the periods in the email address, as those are ignored, and hence
+// "user.name@gmail.com" is equivalent to "username@gmail.com" .
+func CanonicalizeEmail(email string) string {
+	email = strings.ToLower(email)
+	gmailSuffixes := [...]string{"@gmail.com", "@googlemail.com"}
+	for _, suffix := range gmailSuffixes {
+		if strings.HasSuffix(email, suffix) {
+			username := strings.TrimSuffix(email, suffix)
+			username = strings.Replace(username, ".", "", -1)
+			email = fmt.Sprintf("%s%s", username, suffix)
+		}
+	}
+	return email
+}
+
 // MatchAccount returns whether the provided account matches any of the accounts
 // in the passed-in configuration for enforcing the CLA.
 func MatchAccount(account config.Account, accounts []config.Account) bool {
 	for _, account2 := range accounts {
 		if account.Name == account2.Name &&
-			strings.EqualFold(account.Email, account2.Email) &&
+			CanonicalizeEmail(account.Email) == CanonicalizeEmail(account2.Email) &&
 			strings.EqualFold(account.Login, account2.Login) {
 			return true
 		}

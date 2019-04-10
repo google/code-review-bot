@@ -282,3 +282,60 @@ func TestDifferentAuthorAndCommitter(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestCanonicalizeEmail_Gmail(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	var goldenInputOutput = map[string]string{
+		"username@gmail.com":         "username@gmail.com",
+		"user.name@gmail.com":        "username@gmail.com",
+		"UserName@Gmail.Com":         "username@gmail.com",
+		"User.Name@Gmail.Com":        "username@gmail.com",
+		"U.s.e.r.N.a.m.e.@Gmail.Com": "username@gmail.com",
+	}
+
+	for input, expected := range goldenInputOutput {
+		if expected != ghutil.CanonicalizeEmail(input) {
+			t.Log("Should have returned true")
+			t.Fail()
+		}
+	}
+}
+
+func TestGmailAddress_PeriodsDoNotMatchCLA(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	var accountVsCla = map[string]string{
+		"jane.doe@gmail.com":      "janedoe@gmail.com",
+		"JaneDoe@gmail.com":       "Jane.Doe@gmail.com",
+		"janeDoe@gmail.com":       "JaneDoe@gmail.com",
+		"jane.doe@googlemail.com": "janedoe@googlemail.com",
+		"JaneDoe@googlemail.com":  "Jane.Doe@googlemail.com",
+		"janeDoe@googlemail.com":  "JaneDoe@googlemail.com",
+	}
+
+	for acctEmail, claEmail := range accountVsCla {
+		// Credentials as provided by the user.
+		account := config.Account{
+			Name:  "Jane Doe",
+			Email: acctEmail,
+			Login: "janedoe",
+		}
+
+		// CLA as configured by the project.
+		accounts := []config.Account{
+			{
+				Name:  "Jane Doe",
+				Email: claEmail,
+				Login: "janedoe",
+			},
+		}
+
+		if !ghutil.MatchAccount(account, accounts) {
+			t.Log("Should have returned true")
+			t.Fail()
+		}
+	}
+}
