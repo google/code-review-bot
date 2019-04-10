@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(mbrukman): in the future, consider using the recently-added
+// `-copyright_filename` flag: https://github.com/golang/mock/pull/234
+
+//go:generate mockgen -source ghutil.go -destination mock_ghutil.go -package ghutil
 package ghutil
 
 import (
