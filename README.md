@@ -68,8 +68,9 @@ To update the versions of these tools used in this repo:
 1. run the updated `go get` commands above to get newer versions of the tools
 1. run the `go generate` command above to regenerate the mocks
 1. [run the tests](#testing) from the top-level of the tree
-1. commit your changes to this file (`README.md`) and `.travis.yml`, making
-   sure that the build passes on Travis CI before merging the change
+1. commit your changes to this file (`README.md`), `go.mod`, `go.sum`, and
+   `.travis.yml`, making sure that the build passes on Travis CI before merging
+   the change
 
 ## Testing
 
