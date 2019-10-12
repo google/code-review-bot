@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-dist: xenial
+dist: bionic
 language: go
-go: "1.11.1"
+go:
+  - "1.11.x"
+  - "1.12.x"
+  - "1.13.x"
 sudo: false
 
 os:
