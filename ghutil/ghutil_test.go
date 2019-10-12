@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/google/code-review-bot/config"
 	"github.com/google/code-review-bot/ghutil"
@@ -83,10 +84,7 @@ func TestGetAllRepos_OrgAndRepo(t *testing.T) {
 	mockGhc.Repositories.EXPECT().Get(ctx, orgName, repoName).Return(&repo, nil, nil)
 
 	repos := ghc.GetAllRepos(ctx, orgName, repoName)
-	if len(repos) != 1 {
-		t.Logf("repos is not of length 1: %v", repos)
-		t.Fail()
-	}
+	assert.Equal(t, 1, len(repos), "repos is not of length 1: %v", repos)
 }
 
 func TestGetAllRepos_OrgOnly(t *testing.T) {
@@ -102,10 +100,7 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 	mockGhc.Repositories.EXPECT().List(ctx, orgName, nil).Return(expectedRepos, nil, nil)
 
 	actualRepos := ghc.GetAllRepos(ctx, orgName, "")
-	if len(expectedRepos) != len(actualRepos) {
-		t.Logf("Expected repos: %v, actual repos: %v", expectedRepos, actualRepos)
-		t.Fail()
-	}
+	assert.Equal(t, len(expectedRepos), len(actualRepos), "Expected repos: %v, actual repos: %v", expectedRepos, actualRepos)
 }
 
 func TestVerifyRepoHasClaLabels_NoLabels(t *testing.T) {
@@ -117,10 +112,7 @@ func TestVerifyRepoHasClaLabels_NoLabels(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(noLabel, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(noLabel, nil, nil)
 
-	if ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName) {
-		t.Log("Should have returned false")
-		t.Fail()
-	}
+	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
 
 func TestVerifyRepoHasClaLabels_HasYesOnly(t *testing.T) {
@@ -134,10 +126,7 @@ func TestVerifyRepoHasClaLabels_HasYesOnly(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(&label, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(noLabel, nil, nil)
 
-	if ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName) {
-		t.Log("Should have returned false")
-		t.Fail()
-	}
+	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
 
 func TestVerifyRepoHasClaLabels_HasNoOnly(t *testing.T) {
@@ -151,10 +140,7 @@ func TestVerifyRepoHasClaLabels_HasNoOnly(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(noLabel, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(&label, nil, nil)
 
-	if ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName) {
-		t.Log("Should have returned false")
-		t.Fail()
-	}
+	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
 
 func TestVerifyRepoHasClaLabels_YesAndNoLabels(t *testing.T) {
@@ -168,10 +154,7 @@ func TestVerifyRepoHasClaLabels_YesAndNoLabels(t *testing.T) {
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(&labelYes, nil, nil)
 	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(&labelNo, nil, nil)
 
-	if !ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName) {
-		t.Log("Should have returned true")
-		t.Fail()
-	}
+	assert.True(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
 
 func TestMatchAccount_MatchesCase(t *testing.T) {
@@ -194,10 +177,7 @@ func TestMatchAccount_MatchesCase(t *testing.T) {
 		},
 	}
 
-	if !ghutil.MatchAccount(account, accounts) {
-		t.Log("Should have returned true")
-		t.Fail()
-	}
+	assert.True(t, ghutil.MatchAccount(account, accounts))
 }
 
 func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
@@ -220,9 +200,7 @@ func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
 		},
 	}
 
-	if !ghutil.MatchAccount(account, accounts) {
-		t.Log("Should have returned true")
-	}
+	assert.True(t, ghutil.MatchAccount(account, accounts))
 }
 
 func TestDifferentAuthorAndCommitter(t *testing.T) {
@@ -277,10 +255,7 @@ func TestDifferentAuthorAndCommitter(t *testing.T) {
 	}
 
 	commitIsCompliant, commitNonComplianceReason := ghutil.ProcessCommit(&commit, claSigners)
-	if !commitIsCompliant {
-		t.Log("Commit should have been marked compliant; reason: ", commitNonComplianceReason)
-		t.Fail()
-	}
+	assert.True(t, commitIsCompliant, "Commit should have been marked compliant; reason: ", commitNonComplianceReason)
 }
 
 func TestCanonicalizeEmail_Gmail(t *testing.T) {
@@ -296,10 +271,7 @@ func TestCanonicalizeEmail_Gmail(t *testing.T) {
 	}
 
 	for input, expected := range goldenInputOutput {
-		if expected != ghutil.CanonicalizeEmail(input) {
-			t.Log("Should have returned true")
-			t.Fail()
-		}
+		assert.Equal(t, expected, ghutil.CanonicalizeEmail(input))
 	}
 }
 
@@ -333,9 +305,6 @@ func TestGmailAddress_PeriodsDoNotMatchCLA(t *testing.T) {
 			},
 		}
 
-		if !ghutil.MatchAccount(account, accounts) {
-			t.Log("Should have returned true")
-			t.Fail()
-		}
+		assert.True(t, ghutil.MatchAccount(account, accounts))
 	}
 }
