@@ -30,11 +30,11 @@ import (
 	"github.com/google/code-review-bot/logging"
 )
 
-// The `[cla: yes]` and `[cla: no]` labels we expect to be predefined on a
-// given repository.
+// The CLA-related labels we expect to be predefined on a given repository.
 const (
-	LabelClaYes = "cla: yes"
-	LabelClaNo  = "cla: no"
+	LabelClaYes      = "cla: yes"
+	LabelClaNo       = "cla: no"
+	LabelClaExternal = "cla: external"
 )
 
 // OrganizationsService is the subset of `github.OrganizationsService` used by
@@ -115,24 +115,48 @@ func (ghc *GitHubClient) GetAllRepos(ctx context.Context, orgName string, repoNa
 	return []*github.Repository{repo}
 }
 
-// VerifyRepoHasClaLabels checks whether the given GitHub repo has the
-// CLA-related labels defined.
-func (ghc *GitHubClient) VerifyRepoHasClaLabels(ctx context.Context, orgName string, repoName string) bool {
-	// Verify that the repo has [cla: yes] and [cla: no] labels.
-	repoHasClaLabels := true
+type RepoClaLabelStatus struct {
+	HasYes      bool
+	HasNo       bool
+	HasExternal bool
+}
 
-	for _, labelName := range []string{LabelClaYes, LabelClaNo} {
+// GetRepoClaLabelStatus checks whether the given GitHub repo has the
+// CLA-related labels defined.
+func (ghc *GitHubClient) GetRepoClaLabelStatus(ctx context.Context, orgName string, repoName string) (repoClaLabelStatus RepoClaLabelStatus) {
+	repoHasLabel := func(labelName string) bool {
 		label, _, err := ghc.Issues.GetLabel(ctx, orgName, repoName, labelName)
-		if err != nil {
-			repoHasClaLabels = false
-			logging.Errorf("Error getting info on label '%s' for repo '%s/%s': %s", labelName, orgName, repoName, err)
-		}
-		if label == nil {
-			repoHasClaLabels = false
-			logging.Errorf("Label '%s' does not exist in repo '%s/%s'", labelName, orgName, repoName)
+		return label != nil && err == nil
+	}
+
+	repoClaLabelStatus.HasYes = repoHasLabel(LabelClaYes)
+	repoClaLabelStatus.HasNo = repoHasLabel(LabelClaNo)
+	repoClaLabelStatus.HasExternal = repoHasLabel(LabelClaExternal)
+	return
+}
+
+type IssueClaLabelStatus struct {
+	HasYes      bool
+	HasNo       bool
+	HasExternal bool
+}
+
+func (ghc *GitHubClient) GetIssueClaLabelStatus(ctx context.Context, orgName string, repoName string, pullNumber int) (issueClaLabelStatus IssueClaLabelStatus) {
+	labels, _, err := ghc.Issues.ListLabelsByIssue(ctx, orgName, repoName, pullNumber, nil)
+	if err != nil {
+		logging.Errorf("Error listing labels for repo '%s/%s, PR %d: %v", orgName, repoName, pullNumber, err)
+		return
+	}
+	for _, label := range labels {
+		if strings.EqualFold(*label.Name, LabelClaYes) {
+			issueClaLabelStatus.HasYes = true
+		} else if strings.EqualFold(*label.Name, LabelClaNo) {
+			issueClaLabelStatus.HasNo = true
+		} else if strings.EqualFold(*label.Name, LabelClaExternal) {
+			issueClaLabelStatus.HasExternal = true
 		}
 	}
-	return repoHasClaLabels
+	return
 }
 
 // CanonicalizeEmail returns a canonical version of the email address. For all
@@ -297,7 +321,7 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 
 		logging.Infof("Repo: %s/%s", orgName, repoName)
 
-		repoHasClaLabels := ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName)
+		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
 
 		// Find all pull requests.
 		pulls, _, err := ghc.PullRequests.List(ctx, orgName, repoName, nil)
@@ -338,21 +362,10 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 				logging.Info("  PR is NOT CLA-compliant:", pullRequestNonComplianceReason)
 			}
 
-			if repoHasClaLabels {
-				// Get the current set of labels on the PR.
-				labels, _, err := ghc.Issues.ListLabelsByIssue(ctx, orgName, repoName, *pull.Number, nil)
-				if err != nil {
-					logging.Errorf("Error listing labels for repo '%s/%s, PR %d: %v", orgName, repoName, *pull.Number, err)
-				}
-				var hasLabelClaYes, hasLabelClaNo bool
-				for _, label := range labels {
-					if strings.EqualFold(*label.Name, LabelClaYes) {
-						hasLabelClaYes = true
-					} else if strings.EqualFold(*label.Name, LabelClaNo) {
-						hasLabelClaNo = true
-					}
-				}
-
+			if repoClaLabelStatus.HasYes && repoClaLabelStatus.HasNo {
+				issueClaLabelStatus := ghc.GetIssueClaLabelStatus(ctx, orgName, repoName, *pull.Number)
+				var hasLabelClaYes bool = issueClaLabelStatus.HasYes
+				var hasLabelClaNo bool = issueClaLabelStatus.HasNo
 				logging.Infof("  CLA label status [%s]: %v, [%s]: %v", LabelClaYes, hasLabelClaYes, LabelClaNo, hasLabelClaNo)
 
 				addLabel := func(label string) {

@@ -103,24 +103,18 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 	assert.Equal(t, len(expectedRepos), len(actualRepos), "Expected repos: %v, actual repos: %v", expectedRepos, actualRepos)
 }
 
-func expectRepoWithLabel(orgName string, repoName string, label string) {
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, label).Return(&github.Label{}, nil, nil)
-}
-
-func expectRepoWithoutLabel(orgName string, repoName string, label string) {
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, label).Return(noLabel, nil, nil)
-}
-
-func expectRepoLabels(orgName string, repoName string, hasYes bool, hasNo bool) {
-	if hasYes {
-		expectRepoWithLabel(orgName, repoName, ghutil.LabelClaYes)
-	} else {
-		expectRepoWithoutLabel(orgName, repoName, ghutil.LabelClaYes)
+func expectRepoLabels(orgName string, repoName string, hasYes bool, hasNo bool, hasExternal bool) {
+	labels := map[string]bool{
+		ghutil.LabelClaYes:      hasYes,
+		ghutil.LabelClaNo:       hasNo,
+		ghutil.LabelClaExternal: hasExternal,
 	}
-	if hasNo {
-		expectRepoWithLabel(orgName, repoName, ghutil.LabelClaNo)
-	} else {
-		expectRepoWithoutLabel(orgName, repoName, ghutil.LabelClaNo)
+	for label, exists := range labels {
+		var ghLabel *github.Label
+		if exists {
+			ghLabel = &github.Label{}
+		}
+		mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, label).Return(ghLabel, nil, nil)
 	}
 }
 
@@ -128,36 +122,60 @@ func TestVerifyRepoHasClaLabels_NoLabels(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	expectRepoLabels(orgName, repoName, false, false)
+	expectRepoLabels(orgName, repoName, false, false, false)
 
-	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	assert.False(t, repoClaLabelStatus.HasYes)
+	assert.False(t, repoClaLabelStatus.HasNo)
+	assert.False(t, repoClaLabelStatus.HasExternal)
 }
 
-func TestVerifyRepoHasClaLabels_HasYesOnly(t *testing.T) {
+func TestGetRepoClaLabelStatus_HasYesOnly(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	expectRepoLabels(orgName, repoName, true, false)
+	expectRepoLabels(orgName, repoName, true, false, false)
 
-	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	assert.True(t, repoClaLabelStatus.HasYes)
+	assert.False(t, repoClaLabelStatus.HasNo)
+	assert.False(t, repoClaLabelStatus.HasExternal)
 }
 
-func TestVerifyRepoHasClaLabels_HasNoOnly(t *testing.T) {
+func TestGetRepoClaLabelStatus_HasNoOnly(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	expectRepoLabels(orgName, repoName, false, true)
+	expectRepoLabels(orgName, repoName, false, true, false)
 
-	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	assert.False(t, repoClaLabelStatus.HasYes)
+	assert.True(t, repoClaLabelStatus.HasNo)
+	assert.False(t, repoClaLabelStatus.HasExternal)
 }
 
-func TestVerifyRepoHasClaLabels_YesAndNoLabels(t *testing.T) {
+func TestGetRepoClaLabelStatus_YesAndNoLabels(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	expectRepoLabels(orgName, repoName, true, true)
+	expectRepoLabels(orgName, repoName, true, true, false)
 
-	assert.True(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	assert.True(t, repoClaLabelStatus.HasYes)
+	assert.True(t, repoClaLabelStatus.HasNo)
+	assert.False(t, repoClaLabelStatus.HasExternal)
+}
+
+func TestGetRepoClaLabelStatus_YesNoAndExternalLabels(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	expectRepoLabels(orgName, repoName, true, true, true)
+
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	assert.True(t, repoClaLabelStatus.HasYes)
+	assert.True(t, repoClaLabelStatus.HasNo)
+	assert.True(t, repoClaLabelStatus.HasExternal)
 }
 
 func TestMatchAccount_MatchesCase(t *testing.T) {
