@@ -544,6 +544,25 @@ func TestProcessPullRequest_RepoHasLabels_PullHasZeroLabels_NonCompliant_Update(
 	})
 }
 
+func TestProcessPullRequest_RepoHasLabels_PullHasZeroLabels_External_Update(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes:      true,
+			HasNo:       true,
+			HasExternal: true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			External: true,
+		},
+		UpdateRepo:  true,
+		LabelsToAdd: []string{ghutil.LabelClaExternal},
+	})
+}
+
 func TestProcessPullRequest_RepoHasHabels_PullHasYesLabel_Compliant(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
@@ -594,6 +613,50 @@ func TestProcessPullRequest_RepoHasLabels_PullHasYesLabel_NonCompliant(t *testin
 	})
 }
 
+func TestProcessPullRequest_RepoHasYesNoExternalHabels_PullHasYesLabel_External(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes:      true,
+			HasNo:       true,
+			HasExternal: true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{
+			HasYes: true,
+		},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			External: true,
+		},
+		UpdateRepo:     true,
+		LabelsToAdd:    []string{ghutil.LabelClaExternal},
+		LabelsToRemove: []string{ghutil.LabelClaYes},
+	})
+}
+
+func TestProcessPullRequest_RepoHasYesNoHabels_PullHasYesLabel_External(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes: true,
+			HasNo:  true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{
+			HasYes: true,
+		},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			External: true,
+		},
+		UpdateRepo: true,
+		// The external label wouldn't be added in this case, since the
+		// repo doesn't have it.
+		LabelsToRemove: []string{ghutil.LabelClaYes},
+	})
+}
+
 func TestProcessPullRequest_RepoHasLabels_HasNoLabel_Compliant(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
@@ -633,4 +696,230 @@ func TestProcessPullRequest_RepoHasLabels_PullHasNoLabel_NonCompliant(t *testing
 		UpdateRepo: true,
 		// No labels to be added or removed in this case.
 	})
+}
+
+func TestProcessPullRequest_RepoHasLabels_PullHasNoLabel_External(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes:      true,
+			HasNo:       true,
+			HasExternal: true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{
+			HasNo: true,
+		},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			External: true,
+		},
+		UpdateRepo:     true,
+		LabelsToAdd:    []string{ghutil.LabelClaExternal},
+		LabelsToRemove: []string{ghutil.LabelClaNo},
+	})
+}
+
+func createDataForClaExternalTesting() (config.Account, config.Account, []github.RepositoryCommit) {
+	john := config.Account{
+		Name:  "John Doe",
+		Email: "john@example.com",
+		Login: "john-doe",
+	}
+	jane := config.Account{
+		Name:  "Jane Doe",
+		Email: "jane@example.com",
+		Login: "jane-doe",
+	}
+
+	commits := []github.RepositoryCommit{
+		{
+			Author: &github.User{
+				Login: &jane.Login,
+			},
+		},
+		{
+			Committer: &github.User{
+				Login: &jane.Login,
+			},
+		},
+	}
+
+	return john, jane, commits
+}
+
+func TestIsExternal_JustJohnInPeople(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+		},
+	}
+
+	for _, commit := range commits {
+		assert.False(t, ghutil.IsExternal(&commit, claSigners, false),
+			"`%s` should not be considered external when not included", jane.Login)
+	}
+}
+
+func TestIsExternal_JohnAndJaneInPeople(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+			jane,
+		},
+	}
+
+	for _, commit := range commits {
+		assert.False(t, ghutil.IsExternal(&commit, claSigners, false),
+			"`%s` should not be considered external if part of People", jane.Login)
+	}
+}
+
+func TestIsExternal_JaneIsABot(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+		},
+		Bots: []config.Account{
+			jane,
+		},
+	}
+
+	for _, commit := range commits {
+		assert.False(t, ghutil.IsExternal(&commit, claSigners, false),
+			"`%s` should not be considered external if part of Bots", jane.Login)
+	}
+}
+
+func TestIsExternal_JaneIsExternalPerson(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+		},
+		External: &config.ExternalClaSigners{
+			People: []config.Account{
+				jane,
+			},
+		},
+	}
+
+	for _, commit := range commits {
+		assert.True(t, ghutil.IsExternal(&commit, claSigners, false),
+			"`%s` should be considered external", jane.Login)
+	}
+}
+
+func TestIsExternal_JaneIsExternalBot(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+		},
+		External: &config.ExternalClaSigners{
+			Bots: []config.Account{
+				jane,
+			},
+		},
+	}
+
+	for _, commit := range commits {
+		assert.True(t, ghutil.IsExternal(&commit, claSigners, false),
+			"`%s` should be considered external", jane.Login)
+	}
+}
+
+func TestIsExternal_JaneIsExternalCorporate(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+		},
+		External: &config.ExternalClaSigners{
+			Companies: []config.Company{
+				{
+					Name: "company",
+					People: []config.Account{
+						jane,
+					},
+				},
+			},
+		},
+	}
+
+	for _, commit := range commits {
+		assert.True(t, ghutil.IsExternal(&commit, claSigners, false),
+			"`%s` should be considered external", jane.Login)
+	}
+}
+
+func TestIsExternal_JaneIsCorporate_UnknownAsExternal(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+		},
+		Companies: []config.Company{
+			{
+				Name: "company",
+				People: []config.Account{
+					jane,
+				},
+			},
+		},
+	}
+
+	for _, commit := range commits {
+		assert.False(t, ghutil.IsExternal(&commit, claSigners, true),
+			"`%s` should be considered external", jane.Login)
+	}
+}
+
+func TestIsExternal_JaneIsUnlisted_UnknownAsExternal(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	john, jane, commits := createDataForClaExternalTesting()
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			john,
+		},
+	}
+
+	for _, commit := range commits {
+		assert.True(t, ghutil.IsExternal(&commit, claSigners, true),
+			"`%s` should be considered external", jane.Login)
+	}
 }

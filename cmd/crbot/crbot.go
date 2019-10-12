@@ -96,10 +96,11 @@ func main() {
 	// Process org and repo(s) specified on the command-line.
 	ghc := ghutil.NewClient(tc)
 	repoSpec := ghutil.GitHubProcessOrgRepoSpec{
-		Org:        orgName,
-		Repo:       repoName,
-		Pulls:      prNumbers,
-		UpdateRepo: *updateRepoFlag,
+		Org:               orgName,
+		Repo:              repoName,
+		Pulls:             prNumbers,
+		UpdateRepo:        *updateRepoFlag,
+		UnknownAsExternal: cfg.UnknownAsExternal,
 	}
 	ghc.ProcessOrgRepo(ghc, repoSpec, claSigners)
 }
