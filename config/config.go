@@ -34,8 +34,9 @@ type Secrets struct {
 // which it should run, whether for all repos in a single organization, or a
 // single specific repo.
 type Config struct {
-	Org  string `json:"org,omitempty" yaml:"org,omitempty"`
-	Repo string `json:"repo,omitempty" yaml:"repo,omitempty"`
+	Org               string `json:"org,omitempty" yaml:"org,omitempty"`
+	Repo              string `json:"repo,omitempty" yaml:"repo,omitempty"`
+	UnknownAsExternal bool   `json:"unknown_as_external,omitempty" yaml:"unknown_as_external,omitempty"`
 }
 
 // Account represents a single user record, whether human or a bot, with a name,
@@ -54,12 +55,22 @@ type Company struct {
 	People  []Account `json:"people" yaml:"people"`
 }
 
-// ClaSigners provides the overall structure of the CLA config: individual CLA
-// signers, bots, and corporate CLA signers.
-type ClaSigners struct {
+// ExternalClaSigners represents CLA signers managed by an external process,
+// i.e., not covered by this tool. This is useful for handling migrations into
+// or out of the system provided by Code Review Bot.
+type ExternalClaSigners struct {
 	People    []Account `json:"people,omitempty" yaml:"people,omitempty"`
 	Bots      []Account `json:"bots,omitempty" yaml:"bots,omitempty"`
 	Companies []Company `json:"companies,omitempty" yaml:"companies,omitempty"`
+}
+
+// ClaSigners provides the overall structure of the CLA config: individual CLA
+// signers, bots, and corporate CLA signers.
+type ClaSigners struct {
+	People    []Account           `json:"people,omitempty" yaml:"people,omitempty"`
+	Bots      []Account           `json:"bots,omitempty" yaml:"bots,omitempty"`
+	Companies []Company           `json:"companies,omitempty" yaml:"companies,omitempty"`
+	External  *ExternalClaSigners `json:"external,omitempty" yaml:"external,omitempty"`
 }
 
 // parseFile is a helper method for parsing any of the YAML or JSON files we

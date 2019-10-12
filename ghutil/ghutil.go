@@ -105,20 +105,22 @@ type GitHubClient struct {
 // GitHubProcessOrgRepoSpec is the specification of the work to be done for an
 // organization and repo (possibly multiple PRs).
 type GitHubProcessOrgRepoSpec struct {
-	Org        string
-	Repo       string
-	Pulls      []uint64
-	UpdateRepo bool
+	Org               string
+	Repo              string
+	Pulls             []uint64
+	UpdateRepo        bool
+	UnknownAsExternal bool
 }
 
 // GitHubProcessSinglePullSpec is the specification of work to be processed for
 // a single PR, carrying over the rest of the configuration settings from
 // GitHubProcessOrgRepoSpec.
 type GitHubProcessSinglePullSpec struct {
-	Org        string
-	Repo       string
-	Pull       *github.PullRequest
-	UpdateRepo bool
+	Org               string
+	Repo              string
+	Pull              *github.PullRequest
+	UpdateRepo        bool
+	UnknownAsExternal bool
 }
 
 // NewClient creates a client to work with the GitHub API.
@@ -296,6 +298,7 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 
 	commitStatus := CommitStatus{
 		Compliant: true,
+		External:  false,
 	}
 
 	authorLogin := AuthorLogin(commit)
@@ -407,6 +410,7 @@ func checkPullRequestCompliance(ghc *GitHubClient, prSpec GitHubProcessSinglePul
 	ctx := context.Background()
 	pullRequestStatus := PullRequestStatus{
 		Compliant: false,
+		External:  false,
 	}
 
 	pullNumber := *prSpec.Pull.Number
@@ -423,6 +427,14 @@ func checkPullRequestCompliance(ghc *GitHubClient, prSpec GitHubProcessSinglePul
 	pullRequestStatus.Compliant = true
 
 	for _, commit := range commits {
+		// Don't bother processing if either the author's or committer's CLA is managed
+		// externally, as it will be picked up by another tool or bot.
+		isExternal := IsExternal(commit, claSigners, prSpec.UnknownAsExternal)
+		if isExternal {
+			pullRequestStatus.External = true
+			break
+		}
+
 		commitStatus := ProcessCommit(commit, claSigners)
 
 		if commitStatus.Compliant {
@@ -455,94 +467,182 @@ func processPullRequest(ghc *GitHubClient, prSpec GitHubProcessSinglePullSpec, c
 		return err
 	}
 
+	issueClaLabelStatus := ghc.GetIssueClaLabelStatus(ghc, orgName, repoName, *pull.Number)
+	logging.Infof("  CLA label status [%s]: %v, [%s]: %v, [%s]: %v",
+		LabelClaYes, issueClaLabelStatus.HasYes, LabelClaNo, issueClaLabelStatus.HasNo,
+		LabelClaExternal, issueClaLabelStatus.HasExternal)
+
+	addLabel := func(label string) {
+		logging.Infof("  Adding label [%s] to repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
+		if updateRepo {
+			_, _, err := ghc.Issues.AddLabelsToIssue(ctx, orgName, repoName, *pull.Number, []string{label})
+			if err != nil {
+				logging.Errorf("Error adding label [%s] to repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
+			}
+		} else {
+			logging.Info("  ... but -update-repo flag is disabled; skipping")
+		}
+	}
+
+	removeLabel := func(label string) {
+		logging.Infof("  Removing label [%s] from repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
+		if updateRepo {
+			_, err := ghc.Issues.RemoveLabelForIssue(ctx, orgName, repoName, *pull.Number, label)
+			if err != nil {
+				logging.Errorf("  Error removing label [%s] from repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
+			}
+		} else {
+			logging.Info("  ... but -update-repo flag is disabled; skipping")
+		}
+	}
+
+	addComment := func(comment string) {
+		logging.Infof("  Adding comment to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, comment)
+		if updateRepo {
+			issueComment := github.IssueComment{
+				Body: &comment,
+			}
+			_, _, err := ghc.Issues.CreateComment(ctx, orgName, repoName, *pull.Number, &issueComment)
+			if err != nil {
+				logging.Errorf("  Error leaving comment on PR %d: %v", *pull.Number, err)
+			}
+		} else {
+			logging.Info("  ... but -update-repo flag is disabled; skipping")
+		}
+	}
+
+	if pullRequestStatus.External {
+		logging.Info("  PR has externally-managed CLA signer")
+
+		if issueClaLabelStatus.HasExternal {
+			logging.Infof("  PR already has [%s] label", LabelClaExternal)
+		} else {
+			logging.Infof("  PR doesn't have [%s] label, but should", LabelClaExternal)
+			if repoClaLabelStatus.HasExternal {
+				addLabel(LabelClaExternal)
+			}
+		}
+		if issueClaLabelStatus.HasYes {
+			removeLabel(LabelClaYes)
+		}
+		if issueClaLabelStatus.HasNo {
+			removeLabel(LabelClaNo)
+		}
+
+		// No need to add any other CLA-related labels or comments to this PR.
+		return nil
+	} else {
+		if issueClaLabelStatus.HasExternal {
+			logging.Infof("  PR has [%s] label, but shouldn't", LabelClaExternal)
+			removeLabel(LabelClaExternal)
+		} else {
+			logging.Infof("  PR doesn't have [%s] label, and shouldn't", LabelClaExternal)
+			// Nothing to do here.
+		}
+	}
+
 	if pullRequestStatus.Compliant {
 		logging.Info("  PR is CLA-compliant")
 	} else {
 		logging.Info("  PR is NOT CLA-compliant:", pullRequestStatus.NonComplianceReason)
 	}
 
-	if repoClaLabelStatus.HasYes && repoClaLabelStatus.HasNo {
-		issueClaLabelStatus := ghc.GetIssueClaLabelStatus(ghc, orgName, repoName, *pull.Number)
-		var hasLabelClaYes bool = issueClaLabelStatus.HasYes
-		var hasLabelClaNo bool = issueClaLabelStatus.HasNo
-		logging.Infof("  CLA label status [%s]: %v, [%s]: %v", LabelClaYes, hasLabelClaYes, LabelClaNo, hasLabelClaNo)
-
-		addLabel := func(label string) {
-			logging.Infof("  Adding label [%s] to repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
-			if updateRepo {
-				_, _, err := ghc.Issues.AddLabelsToIssue(ctx, orgName, repoName, *pull.Number, []string{label})
-				if err != nil {
-					logging.Errorf("Error adding label [%s] to repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
-				}
-			} else {
-				logging.Info("  ... but -update-repo flag is disabled; skipping")
-			}
+	// Add or remove [cla: yes] and [cla: no] labels, as appropriate.
+	if pullRequestStatus.Compliant {
+		// if PR has [cla: no] label, remove it.
+		if issueClaLabelStatus.HasNo {
+			removeLabel(LabelClaNo)
+		} else {
+			logging.Infof("  No action needed: [%s] label already missing", LabelClaNo)
 		}
-
-		removeLabel := func(label string) {
-			logging.Infof("  Removing label [%s] from repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
-			if updateRepo {
-				_, err := ghc.Issues.RemoveLabelForIssue(ctx, orgName, repoName, *pull.Number, label)
-				if err != nil {
-					logging.Errorf("  Error removing label [%s] from repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
-				}
-			} else {
-				logging.Info("  ... but -update-repo flag is disabled; skipping")
-			}
-		}
-
-		addComment := func(comment string) {
-			logging.Infof("  Adding comment to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, comment)
-			if updateRepo {
-				issueComment := github.IssueComment{
-					Body: &comment,
-				}
-				_, _, err := ghc.Issues.CreateComment(ctx, orgName, repoName, *pull.Number, &issueComment)
-				if err != nil {
-					logging.Errorf("  Error leaving comment on PR %d: %v", *pull.Number, err)
-				}
-			} else {
-				logging.Info("  ... but -update-repo flag is disabled; skipping")
-			}
-		}
-
-		// Add or remove [cla: yes] and [cla: no] labels, as appropriate.
-		if pullRequestStatus.Compliant {
-			// if PR has [cla: no] label, remove it.
-			if hasLabelClaNo {
-				removeLabel(LabelClaNo)
-			} else {
-				logging.Infof("  No action needed: [%s] label already missing", LabelClaNo)
-			}
-			// if PR doesn't have [cla: yes] label, add it.
-			if !hasLabelClaYes {
+		// if PR doesn't have [cla: yes] label, add it.
+		if !issueClaLabelStatus.HasYes {
+			if repoClaLabelStatus.HasYes {
 				addLabel(LabelClaYes)
-			} else {
-				logging.Infof("  No action needed: [%s] label already added", LabelClaYes)
 			}
-		} else /* !pullRequestIsCompliant */ {
-			labelsUpdatedForNonCompliance := false
-			// if PR doesn't have [cla: no] label, add it.
-			if !hasLabelClaNo {
+		} else {
+			logging.Infof("  No action needed: [%s] label already added", LabelClaYes)
+		}
+	} else /* !pullRequestIsCompliant */ {
+		shouldAddComment := false
+		// if PR doesn't have [cla: no] label, add it.
+		if !issueClaLabelStatus.HasNo {
+			if repoClaLabelStatus.HasNo {
 				addLabel(LabelClaNo)
-				labelsUpdatedForNonCompliance = true
-			} else {
-				logging.Infof("  No action needed: [%s] label already added", LabelClaNo)
 			}
-			// if PR has [cla: yes] label, remove it.
-			if hasLabelClaYes {
-				removeLabel(LabelClaYes)
-				labelsUpdatedForNonCompliance = true
-			} else {
-				logging.Infof("  No action needed: [%s] label already missing", LabelClaYes)
-			}
+			shouldAddComment = true
+		} else {
+			logging.Infof("  No action needed: [%s] label already added", LabelClaNo)
+		}
+		// if PR has [cla: yes] label, remove it.
+		if issueClaLabelStatus.HasYes {
+			removeLabel(LabelClaYes)
+			shouldAddComment = true
+		} else {
+			logging.Infof("  No action needed: [%s] label already missing", LabelClaYes)
+		}
 
-			if labelsUpdatedForNonCompliance {
-				addComment(pullRequestStatus.NonComplianceReason)
+		if shouldAddComment {
+			addComment(pullRequestStatus.NonComplianceReason)
+		}
+	}
+
+	return nil
+}
+
+// IsExternal computes whether the given commit should be processed by this
+// tool, or if it should be covered by an external CLA management tool.
+func IsExternal(commit *github.RepositoryCommit, claSigners config.ClaSigners, unknownAsExternal bool) bool {
+	var logins []string
+	if authorLogin := AuthorLogin(commit); authorLogin != "" {
+		logins = append(logins, authorLogin)
+	}
+	if committerLogin := CommitterLogin(commit); committerLogin != "" {
+		logins = append(logins, committerLogin)
+	}
+
+	matchLogins := func(logins []string, accounts []config.Account) bool {
+		for _, account := range accounts {
+			for _, username := range logins {
+				if username == account.Login {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	if claSigners.External != nil {
+		external := claSigners.External
+		if matchLogins(logins, external.People) ||
+			matchLogins(logins, external.Bots) {
+			return true
+		}
+
+		for _, company := range external.Companies {
+			if matchLogins(logins, company.People) {
+				return true
 			}
 		}
 	}
-	return nil
+
+	// If the logins don't match any of the CLA Signers *and* the
+	// `unknownAsExternal` is true, then this is an externally-managed
+	// contributor.
+	if !matchLogins(logins, claSigners.People) && !matchLogins(logins, claSigners.Bots) {
+		claEntryFound := false
+		for _, company := range claSigners.Companies {
+			if matchLogins(logins, company.People) {
+				claEntryFound = true
+				break
+			}
+		}
+		if !claEntryFound && unknownAsExternal {
+			return true
+		}
+	}
+
+	return false
 }
 
 // processOrgRepo handles all PRs in specified repos in the organization or user
@@ -570,10 +670,11 @@ func processOrgRepo(ghc *GitHubClient, repoSpec GitHubProcessOrgRepoSpec, claSig
 		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, orgName, repoName)
 		for _, pull := range pulls {
 			prSpec := GitHubProcessSinglePullSpec{
-				Org:        orgName,
-				Repo:       repoName,
-				Pull:       pull,
-				UpdateRepo: repoSpec.UpdateRepo,
+				Org:               orgName,
+				Repo:              repoName,
+				Pull:              pull,
+				UpdateRepo:        repoSpec.UpdateRepo,
+				UnknownAsExternal: repoSpec.UnknownAsExternal,
 			}
 			err := ghc.ProcessPullRequest(ghc, prSpec, claSigners, repoClaLabelStatus)
 			if err != nil {
