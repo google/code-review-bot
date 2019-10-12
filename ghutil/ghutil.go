@@ -307,6 +307,122 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 	return
 }
 
+func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
+	logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
+	// List all commits for this PR
+	commits, _, err := ghc.PullRequests.ListCommits(ctx, orgName, repoName, *pull.Number, nil)
+	if err != nil {
+		logging.Error("Error finding all commits on PR", pull.Number)
+		return err
+	}
+
+	// Start off with the base case that the PR is compliant and disqualify it if
+	// anything is amiss.
+	pullRequestIsCompliant := true
+	var pullRequestNonComplianceReason string
+
+	for _, commit := range commits {
+		commitIsCompliant, commitNonComplianceReason := ProcessCommit(commit, claSigners)
+
+		if commitIsCompliant {
+			logging.Info("    compliant: true")
+		} else {
+			logging.Info("    compliant: false:", commitNonComplianceReason)
+			pullRequestNonComplianceReason = commitNonComplianceReason
+			pullRequestIsCompliant = false
+		}
+	}
+
+	if pullRequestIsCompliant {
+		logging.Info("  PR is CLA-compliant")
+	} else {
+		logging.Info("  PR is NOT CLA-compliant:", pullRequestNonComplianceReason)
+	}
+
+	if repoClaLabelStatus.HasYes && repoClaLabelStatus.HasNo {
+		issueClaLabelStatus := ghc.GetIssueClaLabelStatus(ctx, orgName, repoName, *pull.Number)
+		var hasLabelClaYes bool = issueClaLabelStatus.HasYes
+		var hasLabelClaNo bool = issueClaLabelStatus.HasNo
+		logging.Infof("  CLA label status [%s]: %v, [%s]: %v", LabelClaYes, hasLabelClaYes, LabelClaNo, hasLabelClaNo)
+
+		addLabel := func(label string) {
+			logging.Infof("  Adding label [%s] to repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
+			if updateRepo {
+				_, _, err := ghc.Issues.AddLabelsToIssue(ctx, orgName, repoName, *pull.Number, []string{label})
+				if err != nil {
+					logging.Errorf("Error adding label [%s] to repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
+				}
+			} else {
+				logging.Info("  ... but -update-repo flag is disabled; skipping")
+			}
+		}
+
+		removeLabel := func(label string) {
+			logging.Infof("  Removing label [%s] from repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
+			if updateRepo {
+				_, err := ghc.Issues.RemoveLabelForIssue(ctx, orgName, repoName, *pull.Number, label)
+				if err != nil {
+					logging.Errorf("  Error removing label [%s] from repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
+				}
+			} else {
+				logging.Info("  ... but -update-repo flag is disabled; skipping")
+			}
+		}
+
+		addComment := func(comment string) {
+			logging.Infof("  Adding comment to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, comment)
+			if updateRepo {
+				issueComment := github.IssueComment{
+					Body: &comment,
+				}
+				_, _, err := ghc.Issues.CreateComment(ctx, orgName, repoName, *pull.Number, &issueComment)
+				if err != nil {
+					logging.Errorf("  Error leaving comment on PR %d: %v", *pull.Number, err)
+				}
+			} else {
+				logging.Info("  ... but -update-repo flag is disabled; skipping")
+			}
+		}
+
+		// Add or remove [cla: yes] and [cla: no] labels, as appropriate.
+		if pullRequestIsCompliant {
+			// if PR has [cla: no] label, remove it.
+			if hasLabelClaNo {
+				removeLabel(LabelClaNo)
+			} else {
+				logging.Infof("  No action needed: [%s] label already missing", LabelClaNo)
+			}
+			// if PR doesn't have [cla: yes] label, add it.
+			if !hasLabelClaYes {
+				addLabel(LabelClaYes)
+			} else {
+				logging.Infof("  No action needed: [%s] label already added", LabelClaYes)
+			}
+		} else /* !pullRequestIsCompliant */ {
+			labelsUpdatedForNonCompliance := false
+			// if PR doesn't have [cla: no] label, add it.
+			if !hasLabelClaNo {
+				addLabel(LabelClaNo)
+				labelsUpdatedForNonCompliance = true
+			} else {
+				logging.Infof("  No action needed: [%s] label already added", LabelClaNo)
+			}
+			// if PR has [cla: yes] label, remove it.
+			if hasLabelClaYes {
+				removeLabel(LabelClaYes)
+				labelsUpdatedForNonCompliance = true
+			} else {
+				logging.Infof("  No action needed: [%s] label already missing", LabelClaYes)
+			}
+
+			if labelsUpdatedForNonCompliance {
+				addComment(pullRequestNonComplianceReason)
+			}
+		}
+	}
+	return nil
+}
+
 // ProcessOrgRepo handles all PRs in specified repos in the organization or user
 // account. If `repoName` is empty, it processes all repos, if `repoName` is
 // non-empty, it processes the specified repo.
@@ -321,128 +437,16 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 
 		logging.Infof("Repo: %s/%s", orgName, repoName)
 
-		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
-
 		// Find all pull requests.
 		pulls, _, err := ghc.PullRequests.List(ctx, orgName, repoName, nil)
 		if err != nil {
 			logging.Fatalf("Error listing pull requests for %s/%s: %s", orgName, repoName, err)
 		}
 
-		// For each pull request, print all commits, username, email address
+		// Process each pull request for author & commiter CLA status.
+		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
 		for _, pull := range pulls {
-			logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
-			// List all commits for this PR
-			commits, _, err := ghc.PullRequests.ListCommits(ctx, orgName, repoName, *pull.Number, nil)
-			if err != nil {
-				logging.Error("Error finding all commits on PR", pull.Number)
-				continue
-			}
-
-			// Start off with the base case that the PR is compliant and disqualify it if
-			// anything is amiss.
-			pullRequestIsCompliant := true
-			var pullRequestNonComplianceReason string
-
-			for _, commit := range commits {
-				commitIsCompliant, commitNonComplianceReason := ProcessCommit(commit, claSigners)
-
-				if commitIsCompliant {
-					logging.Info("    compliant: true")
-				} else {
-					logging.Info("    compliant: false:", commitNonComplianceReason)
-					pullRequestNonComplianceReason = commitNonComplianceReason
-					pullRequestIsCompliant = false
-				}
-			}
-
-			if pullRequestIsCompliant {
-				logging.Info("  PR is CLA-compliant")
-			} else {
-				logging.Info("  PR is NOT CLA-compliant:", pullRequestNonComplianceReason)
-			}
-
-			if repoClaLabelStatus.HasYes && repoClaLabelStatus.HasNo {
-				issueClaLabelStatus := ghc.GetIssueClaLabelStatus(ctx, orgName, repoName, *pull.Number)
-				var hasLabelClaYes bool = issueClaLabelStatus.HasYes
-				var hasLabelClaNo bool = issueClaLabelStatus.HasNo
-				logging.Infof("  CLA label status [%s]: %v, [%s]: %v", LabelClaYes, hasLabelClaYes, LabelClaNo, hasLabelClaNo)
-
-				addLabel := func(label string) {
-					logging.Infof("  Adding label [%s] to repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
-					if repoSpec.UpdateRepo {
-						_, _, err := ghc.Issues.AddLabelsToIssue(ctx, orgName, repoName, *pull.Number, []string{label})
-						if err != nil {
-							logging.Errorf("Error adding label [%s] to repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
-						}
-					} else {
-						logging.Info("  ... but -update-repo flag is disabled; skipping")
-					}
-				}
-
-				removeLabel := func(label string) {
-					logging.Infof("  Removing label [%s] from repo '%s/%s' PR %d...", label, orgName, repoName, *pull.Number)
-					if repoSpec.UpdateRepo {
-						_, err := ghc.Issues.RemoveLabelForIssue(ctx, orgName, repoName, *pull.Number, label)
-						if err != nil {
-							logging.Errorf("  Error removing label [%s] from repo '%s/%s' PR %d: %v", label, orgName, repoName, *pull.Number, err)
-						}
-					} else {
-						logging.Info("  ... but -update-repo flag is disabled; skipping")
-					}
-				}
-
-				addComment := func(comment string) {
-					logging.Infof("  Adding comment to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, comment)
-					if repoSpec.UpdateRepo {
-						issueComment := github.IssueComment{
-							Body: &comment,
-						}
-						_, _, err := ghc.Issues.CreateComment(ctx, orgName, repoName, *pull.Number, &issueComment)
-						if err != nil {
-							logging.Errorf("  Error leaving comment on PR %d: %v", *pull.Number, err)
-						}
-					} else {
-						logging.Info("  ... but -update-repo flag is disabled; skipping")
-					}
-				}
-
-				// Add or remove [cla: yes] and [cla: no] labels, as appropriate.
-				if pullRequestIsCompliant {
-					// if PR has [cla: no] label, remove it.
-					if hasLabelClaNo {
-						removeLabel(LabelClaNo)
-					} else {
-						logging.Infof("  No action needed: [%s] label already missing", LabelClaNo)
-					}
-					// if PR doesn't have [cla: yes] label, add it.
-					if !hasLabelClaYes {
-						addLabel(LabelClaYes)
-					} else {
-						logging.Infof("  No action needed: [%s] label already added", LabelClaYes)
-					}
-				} else /* !pullRequestIsCompliant */ {
-					labelsUpdatedForNonCompliance := false
-					// if PR doesn't have [cla: no] label, add it.
-					if !hasLabelClaNo {
-						addLabel(LabelClaNo)
-						labelsUpdatedForNonCompliance = true
-					} else {
-						logging.Infof("  No action needed: [%s] label already added", LabelClaNo)
-					}
-					// if PR has [cla: yes] label, remove it.
-					if hasLabelClaYes {
-						removeLabel(LabelClaYes)
-						labelsUpdatedForNonCompliance = true
-					} else {
-						logging.Infof("  No action needed: [%s] label already missing", LabelClaYes)
-					}
-
-					if labelsUpdatedForNonCompliance {
-						addComment(pullRequestNonComplianceReason)
-					}
-				}
-			}
+			ghc.ProcessPullRequest(ctx, orgName, repoName, pull, claSigners, repoClaLabelStatus, repoSpec.UpdateRepo)
 		}
 	}
 }
