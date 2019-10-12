@@ -13,12 +13,13 @@
 # limitations under the License.
 
 dist: bionic
+sudo: false
+
 language: go
 go:
   - "1.11.x"
   - "1.12.x"
   - "1.13.x"
-sudo: false
 
 os:
   - linux
@@ -26,6 +27,12 @@ os:
 
 env:
   - GO111MODULE=on
+
+matrix:
+  allow_failures:
+    - os: osx
+
+  fast_finish: true
 
 before_script:
   - go build ./...
