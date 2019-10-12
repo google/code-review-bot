@@ -55,6 +55,7 @@ var (
 	ctrl    *gomock.Controller
 	ghc     *ghutil.GitHubClient
 	mockGhc *MockGitHubClient
+	ctx     context.Context
 
 	noLabel *github.Label = nil
 )
@@ -68,6 +69,7 @@ func setUp(t *testing.T) {
 	ctrl = gomock.NewController(t)
 	ghc = &ghutil.GitHubClient{}
 	mockGhc = NewMockGitHubClient(ghc, ctrl)
+	ctx = context.Background()
 }
 
 func tearDown(_ *testing.T) {
@@ -79,7 +81,6 @@ func TestGetAllRepos_OrgAndRepo(t *testing.T) {
 	defer tearDown(t)
 
 	repo := github.Repository{}
-	ctx := context.Background()
 
 	mockGhc.Repositories.EXPECT().Get(ctx, orgName, repoName).Return(&repo, nil, nil)
 
@@ -95,7 +96,6 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 		{},
 		{},
 	}
-	ctx := context.Background()
 
 	mockGhc.Repositories.EXPECT().List(ctx, orgName, nil).Return(expectedRepos, nil, nil)
 
@@ -103,14 +103,32 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 	assert.Equal(t, len(expectedRepos), len(actualRepos), "Expected repos: %v, actual repos: %v", expectedRepos, actualRepos)
 }
 
+func expectRepoWithLabel(orgName string, repoName string, label string) {
+	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, label).Return(&github.Label{}, nil, nil)
+}
+
+func expectRepoWithoutLabel(orgName string, repoName string, label string) {
+	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, label).Return(noLabel, nil, nil)
+}
+
+func expectRepoLabels(orgName string, repoName string, hasYes bool, hasNo bool) {
+	if hasYes {
+		expectRepoWithLabel(orgName, repoName, ghutil.LabelClaYes)
+	} else {
+		expectRepoWithoutLabel(orgName, repoName, ghutil.LabelClaYes)
+	}
+	if hasNo {
+		expectRepoWithLabel(orgName, repoName, ghutil.LabelClaNo)
+	} else {
+		expectRepoWithoutLabel(orgName, repoName, ghutil.LabelClaNo)
+	}
+}
+
 func TestVerifyRepoHasClaLabels_NoLabels(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	ctx := context.Background()
-
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(noLabel, nil, nil)
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(noLabel, nil, nil)
+	expectRepoLabels(orgName, repoName, false, false)
 
 	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
@@ -119,12 +137,7 @@ func TestVerifyRepoHasClaLabels_HasYesOnly(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	label := github.Label{}
-
-	ctx := context.Background()
-
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(&label, nil, nil)
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(noLabel, nil, nil)
+	expectRepoLabels(orgName, repoName, true, false)
 
 	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
@@ -133,12 +146,7 @@ func TestVerifyRepoHasClaLabels_HasNoOnly(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	label := github.Label{}
-
-	ctx := context.Background()
-
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(noLabel, nil, nil)
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(&label, nil, nil)
+	expectRepoLabels(orgName, repoName, false, true)
 
 	assert.False(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
@@ -147,12 +155,7 @@ func TestVerifyRepoHasClaLabels_YesAndNoLabels(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	labelYes := github.Label{}
-	labelNo := github.Label{}
-	ctx := context.Background()
-
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaYes).Return(&labelYes, nil, nil)
-	mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, ghutil.LabelClaNo).Return(&labelNo, nil, nil)
+	expectRepoLabels(orgName, repoName, true, true)
 
 	assert.True(t, ghc.VerifyRepoHasClaLabels(ctx, orgName, repoName))
 }
