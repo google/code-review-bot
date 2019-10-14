@@ -35,6 +35,8 @@ const (
 	LabelClaYes      = "cla: yes"
 	LabelClaNo       = "cla: no"
 	LabelClaExternal = "cla: external"
+
+	ReviewRequestChanges = "REQUEST_CHANGES"
 )
 
 // OrganizationsService is the subset of `github.OrganizationsService` used by
@@ -370,21 +372,6 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			}
 		}
 
-		addComment := func(comment string) {
-			logging.Infof("  Adding comment to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, comment)
-			if updateRepo {
-				issueComment := github.IssueComment{
-					Body: &comment,
-				}
-				_, _, err := ghc.Issues.CreateComment(ctx, orgName, repoName, *pull.Number, &issueComment)
-				if err != nil {
-					logging.Errorf("  Error leaving comment on PR %d: %v", *pull.Number, err)
-				}
-			} else {
-				logging.Info("  ... but -update-repo flag is disabled; skipping")
-			}
-		}
-
 		addReview := func(review string, event string) {
 			logging.Infof("  Adding review to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, review)
 			if updateRepo {
@@ -403,9 +390,6 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 
 		// Add or remove [cla: yes] and [cla: no] labels, as appropriate.
 		if pullRequestIsCompliant {
-			logging.Info("Going to add a review")
-			addReview("Bad PR", "REQUEST_CHANGES")
-			//addReview("I APPROVED!", "APPROVE")
 			// if PR has [cla: no] label, remove it.
 			if hasLabelClaNo {
 				removeLabel(LabelClaNo)
@@ -436,7 +420,7 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			}
 
 			if labelsUpdatedForNonCompliance {
-				addComment(pullRequestNonComplianceReason)
+				addReview(pullRequestNonComplianceReason, ReviewRequestChanges)
 			}
 		}
 	}
