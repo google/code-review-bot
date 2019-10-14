@@ -61,6 +61,7 @@ type IssuesService interface {
 // PullRequestsService is the subset of `github.PullRequestsService` used by
 // this module.
 type PullRequestsService interface {
+	CreateReview(ctx context.Context, owner string, repo string, number int, review *github.PullRequestReviewRequest) (*github.PullRequestReview, *github.Response, error)
 	List(ctx context.Context, owner string, repo string, opt *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error)
 	ListCommits(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 }
@@ -384,8 +385,27 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			}
 		}
 
+		addReview := func(review string, event string) {
+			logging.Infof("  Adding review to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, review)
+			if updateRepo {
+				prReview := github.PullRequestReviewRequest{
+					Body:  &review,
+					Event: &event,
+				}
+				_, _, err := ghc.PullRequests.CreateReview(ctx, orgName, repoName, *pull.Number, &prReview)
+				if err != nil {
+					logging.Errorf("  Error leaving review on PR %d: %v", *pull.Number, err)
+				}
+			} else {
+				logging.Info("  ... but -update-repo flag is disabled; skipping")
+			}
+		}
+
 		// Add or remove [cla: yes] and [cla: no] labels, as appropriate.
 		if pullRequestIsCompliant {
+			logging.Info("Going to add a review")
+			addReview("Bad PR", "REQUEST_CHANGES")
+			//addReview("I APPROVED!", "APPROVE")
 			// if PR has [cla: no] label, remove it.
 			if hasLabelClaNo {
 				removeLabel(LabelClaNo)
