@@ -37,6 +37,7 @@ const (
 	LabelClaExternal = "cla: external"
 
 	ReviewRequestChanges = "REQUEST_CHANGES"
+	ReviewApprove        = "APPROVE"
 )
 
 // OrganizationsService is the subset of `github.OrganizationsService` used by
@@ -384,7 +385,7 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 		}
 
 		addReview := func(review string, event string) {
-			logging.Infof("  Adding review to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, review)
+			logging.Infof("  Adding %s review to repo '%s/%s/ PR %d: %s", event, orgName, repoName, *pull.Number, review)
 			if updateRepo {
 				prReview := github.PullRequestReviewRequest{
 					Body:  &review,
@@ -413,26 +414,23 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			} else {
 				logging.Infof("  No action needed: [%s] label already added", LabelClaYes)
 			}
+
+			addReview(pullRequestNonComplianceReason, ReviewApprove)
 		} else /* !pullRequestIsCompliant */ {
-			labelsUpdatedForNonCompliance := false
 			// if PR doesn't have [cla: no] label, add it.
 			if !hasLabelClaNo {
 				addLabel(LabelClaNo)
-				labelsUpdatedForNonCompliance = true
 			} else {
 				logging.Infof("  No action needed: [%s] label already added", LabelClaNo)
 			}
 			// if PR has [cla: yes] label, remove it.
 			if hasLabelClaYes {
 				removeLabel(LabelClaYes)
-				labelsUpdatedForNonCompliance = true
 			} else {
 				logging.Infof("  No action needed: [%s] label already missing", LabelClaYes)
 			}
 
-			if labelsUpdatedForNonCompliance {
-				addReview(pullRequestNonComplianceReason, ReviewRequestChanges)
-			}
+			addReview(pullRequestNonComplianceReason, ReviewRequestChanges)
 		}
 	}
 	return nil
