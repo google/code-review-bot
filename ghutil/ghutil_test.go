@@ -16,6 +16,7 @@ package ghutil_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -61,8 +62,9 @@ var (
 )
 
 const (
-	orgName  = "org"
-	repoName = "repo"
+	orgName    = "org"
+	repoName   = "repo"
+	pullNumber = 42
 )
 
 func setUp(t *testing.T) {
@@ -328,4 +330,115 @@ func TestGmailAddress_PeriodsDoNotMatchCLA(t *testing.T) {
 
 		assert.True(t, ghutil.MatchAccount(account, accounts))
 	}
+}
+
+func TestCheckPullRequestCompliance_ListCommitsError(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	err := errors.New("Invalid PR")
+	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(nil, nil, err)
+
+	claSigners := config.ClaSigners{}
+	isCompliant, nonComplianceReason, retErr := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	assert.False(t, isCompliant)
+	assert.Equal(t, "", nonComplianceReason)
+	assert.Equal(t, err, retErr)
+}
+
+func createCommit(sha string, name string, email string, login string) *github.RepositoryCommit {
+	return &github.RepositoryCommit{
+		SHA: &sha,
+		Commit: &github.Commit{
+			Author: &github.CommitAuthor{
+				Name:  &name,
+				Email: &email,
+			},
+			Committer: &github.CommitAuthor{
+				Name:  &name,
+				Email: &email,
+			},
+		},
+		Author: &github.User{
+			Login: &login,
+		},
+		Committer: &github.User{
+			Login: &login,
+		},
+	}
+}
+
+func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	sha1 := "12345abcde"
+	name1 := "John Doe"
+	email1 := "john@example.com"
+	login1 := "john-doe"
+
+	sha2 := "abcde24680"
+	name2 := "Jane Doe"
+	email2 := "jane@example.com"
+	login2 := "jane-doe"
+
+	commits := []*github.RepositoryCommit{
+		createCommit(sha1, name1, email1, login1),
+		createCommit(sha2, name2, email2, login2),
+	}
+	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			{
+				Name:  name1,
+				Email: email1,
+				Login: login1,
+			},
+			{
+				Name:  name2,
+				Email: email2,
+				Login: login2,
+			},
+		},
+	}
+	isCompliant, nonComplianceReason, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	assert.True(t, isCompliant)
+	assert.Equal(t, "", nonComplianceReason)
+	assert.Nil(t, err)
+}
+
+func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	sha1 := "12345abcde"
+	name1 := "John Doe"
+	email1 := "john@example.com"
+	login1 := "john-doe"
+
+	sha2 := "abcde24680"
+	name2 := "Jane Doe"
+	email2 := "jane@example.com"
+	login2 := "jane-doe"
+
+	commits := []*github.RepositoryCommit{
+		createCommit(sha1, name1, email1, login1),
+		createCommit(sha2, name2, email2, login2),
+	}
+	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			{
+				Name:  name1,
+				Email: email1,
+				Login: login1,
+			},
+		},
+	}
+	isCompliant, nonComplianceReason, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	assert.False(t, isCompliant)
+	assert.Equal(t, "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization.", nonComplianceReason)
+	assert.Nil(t, err)
 }
