@@ -307,19 +307,20 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 	return
 }
 
-func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
-	logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
+func (ghc *GitHubClient) CheckPullRequestCompliance(ctx context.Context, orgName string, repoName string, pullNumber int, claSigners config.ClaSigners) (bool, string, error) {
+	var pullRequestIsCompliant bool
+	var pullRequestNonComplianceReason string
+
 	// List all commits for this PR
-	commits, _, err := ghc.PullRequests.ListCommits(ctx, orgName, repoName, *pull.Number, nil)
+	commits, _, err := ghc.PullRequests.ListCommits(ctx, orgName, repoName, pullNumber, nil)
 	if err != nil {
-		logging.Error("Error finding all commits on PR", pull.Number)
-		return err
+		logging.Error("Error finding all commits on PR", pullNumber)
+		return pullRequestIsCompliant, pullRequestNonComplianceReason, err
 	}
 
 	// Start off with the base case that the PR is compliant and disqualify it if
 	// anything is amiss.
-	pullRequestIsCompliant := true
-	var pullRequestNonComplianceReason string
+	pullRequestIsCompliant = true
 
 	for _, commit := range commits {
 		commitIsCompliant, commitNonComplianceReason := ProcessCommit(commit, claSigners)
@@ -331,6 +332,16 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			pullRequestNonComplianceReason = commitNonComplianceReason
 			pullRequestIsCompliant = false
 		}
+	}
+	return pullRequestIsCompliant, pullRequestNonComplianceReason, nil
+}
+
+func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
+	logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
+
+	pullRequestIsCompliant, pullRequestNonComplianceReason, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, *pull.Number, claSigners)
+	if err != nil {
+		return err
 	}
 
 	if pullRequestIsCompliant {
@@ -446,7 +457,10 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 		// Process each pull request for author & commiter CLA status.
 		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
 		for _, pull := range pulls {
-			ghc.ProcessPullRequest(ctx, orgName, repoName, pull, claSigners, repoClaLabelStatus, repoSpec.UpdateRepo)
+			err := ghc.ProcessPullRequest(ctx, orgName, repoName, pull, claSigners, repoClaLabelStatus, repoSpec.UpdateRepo)
+			if err != nil {
+				logging.Errorf("Error processing PR %d: %s", *pull.Number, err)
+			}
 		}
 	}
 }
