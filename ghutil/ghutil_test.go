@@ -442,3 +442,103 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 	assert.Equal(t, "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization.", nonComplianceReason)
 	assert.Nil(t, err)
 }
+
+func TestCheckProcessPullRequest_Compliant_Approve(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	expectRepoLabels(orgName, repoName, true, true, false)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			{
+				Name:  "John Doe",
+				Email: "john@example.com",
+				Login: "john-doe",
+			},
+		},
+	}
+	var prNum = 42
+	var num *int
+	num = &prNum
+	var prTitle = "Fix Things"
+	var title *string
+	title = &prTitle
+	pull := &github.PullRequest{Number: num, Title: title}
+
+	var commits []*github.RepositoryCommit
+	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
+	mockGhc.Issues.EXPECT().ListLabelsByIssue(ctx, orgName, repoName, prNum, nil).Return(nil, nil, nil)
+	mockGhc.Issues.EXPECT().AddLabelsToIssue(ctx, orgName, repoName, prNum, []string{"cla: yes"}).Return(nil, nil, nil)
+	var reviewBody = ""
+	var body *string
+	body = &reviewBody
+	var reviewEvent = "APPROVE"
+	var event *string
+	event = &reviewEvent
+	var prReview = github.PullRequestReviewRequest{
+		Body:  body,
+		Event: event,
+	}
+	mockGhc.PullRequests.EXPECT().CreateReview(ctx, orgName, repoName, prNum, &prReview).Return(nil, nil, nil)
+	err := ghc.ProcessPullRequest(ctx, orgName, repoName, pull, claSigners, repoClaLabelStatus, true)
+	assert.Nil(t, err)
+}
+
+func TestCheckProcessPullRequest_NotCompliant_RequestChanges(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	expectRepoLabels(orgName, repoName, true, true, false)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+
+	sha1 := "12345abcde"
+	name1 := "John Doe"
+	email1 := "john@example.com"
+	login1 := "john-doe"
+
+	sha2 := "abcde24680"
+	name2 := "Jane Doe"
+	email2 := "jane@example.com"
+	login2 := "jane-doe"
+
+	commits := []*github.RepositoryCommit{
+		createCommit(sha1, name1, email1, login1),
+		createCommit(sha2, name2, email2, login2),
+	}
+
+	claSigners := config.ClaSigners{
+		People: []config.Account{
+			{
+				Name:  name1,
+				Email: email1,
+				Login: login1,
+			},
+		},
+	}
+	var prNum = 42
+	var num *int
+	num = &prNum
+	var prTitle = "Fix Things"
+	var title *string
+	title = &prTitle
+	pull := &github.PullRequest{Number: num, Title: title}
+
+	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
+	mockGhc.Issues.EXPECT().ListLabelsByIssue(ctx, orgName, repoName, prNum, nil).Return(nil, nil, nil)
+	mockGhc.Issues.EXPECT().AddLabelsToIssue(ctx, orgName, repoName, prNum, []string{"cla: no"}).Return(nil, nil, nil)
+	var reviewBody = "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
+	var body *string
+	body = &reviewBody
+	var reviewEvent = "REQUEST_CHANGES"
+	var event *string
+	event = &reviewEvent
+	var prReview = github.PullRequestReviewRequest{
+		Body:  body,
+		Event: event,
+	}
+	mockGhc.PullRequests.EXPECT().CreateReview(ctx, orgName, repoName, prNum, &prReview).Return(nil, nil, nil)
+	err := ghc.ProcessPullRequest(ctx, orgName, repoName, pull, claSigners, repoClaLabelStatus, true)
+	assert.Nil(t, err)
+}

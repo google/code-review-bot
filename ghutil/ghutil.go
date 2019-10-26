@@ -35,6 +35,9 @@ const (
 	LabelClaYes      = "cla: yes"
 	LabelClaNo       = "cla: no"
 	LabelClaExternal = "cla: external"
+
+	ReviewRequestChanges = "REQUEST_CHANGES"
+	ReviewApprove        = "APPROVE"
 )
 
 // OrganizationsService is the subset of `github.OrganizationsService` used by
@@ -61,6 +64,7 @@ type IssuesService interface {
 // PullRequestsService is the subset of `github.PullRequestsService` used by
 // this module.
 type PullRequestsService interface {
+	CreateReview(ctx context.Context, owner string, repo string, number int, review *github.PullRequestReviewRequest) (*github.PullRequestReview, *github.Response, error)
 	List(ctx context.Context, owner string, repo string, opt *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error)
 	ListCommits(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 }
@@ -380,15 +384,16 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			}
 		}
 
-		addComment := func(comment string) {
-			logging.Infof("  Adding comment to repo '%s/%s/ PR %d: %s", orgName, repoName, *pull.Number, comment)
+		addReview := func(review string, event string) {
+			logging.Infof("  Adding %s review to repo '%s/%s/ PR %d: %s", event, orgName, repoName, *pull.Number, review)
 			if updateRepo {
-				issueComment := github.IssueComment{
-					Body: &comment,
+				prReview := github.PullRequestReviewRequest{
+					Body:  &review,
+					Event: &event,
 				}
-				_, _, err := ghc.Issues.CreateComment(ctx, orgName, repoName, *pull.Number, &issueComment)
+				_, _, err := ghc.PullRequests.CreateReview(ctx, orgName, repoName, *pull.Number, &prReview)
 				if err != nil {
-					logging.Errorf("  Error leaving comment on PR %d: %v", *pull.Number, err)
+					logging.Errorf("  Error leaving review on PR %d: %v", *pull.Number, err)
 				}
 			} else {
 				logging.Info("  ... but -update-repo flag is disabled; skipping")
@@ -409,26 +414,23 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			} else {
 				logging.Infof("  No action needed: [%s] label already added", LabelClaYes)
 			}
+
+			addReview(pullRequestNonComplianceReason, ReviewApprove)
 		} else /* !pullRequestIsCompliant */ {
-			labelsUpdatedForNonCompliance := false
 			// if PR doesn't have [cla: no] label, add it.
 			if !hasLabelClaNo {
 				addLabel(LabelClaNo)
-				labelsUpdatedForNonCompliance = true
 			} else {
 				logging.Infof("  No action needed: [%s] label already added", LabelClaNo)
 			}
 			// if PR has [cla: yes] label, remove it.
 			if hasLabelClaYes {
 				removeLabel(LabelClaYes)
-				labelsUpdatedForNonCompliance = true
 			} else {
 				logging.Infof("  No action needed: [%s] label already missing", LabelClaYes)
 			}
 
-			if labelsUpdatedForNonCompliance {
-				addComment(pullRequestNonComplianceReason)
-			}
+			addReview(pullRequestNonComplianceReason, ReviewRequestChanges)
 		}
 	}
 	return nil
