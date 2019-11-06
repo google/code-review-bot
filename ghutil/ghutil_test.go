@@ -277,8 +277,8 @@ func TestDifferentAuthorAndCommitter(t *testing.T) {
 		},
 	}
 
-	commitIsCompliant, commitNonComplianceReason := ghutil.ProcessCommit(&commit, claSigners)
-	assert.True(t, commitIsCompliant, "Commit should have been marked compliant; reason: ", commitNonComplianceReason)
+	commitStatus := ghutil.ProcessCommit(&commit, claSigners)
+	assert.True(t, commitStatus.Compliant, "Commit should have been marked compliant; reason: ", commitStatus.NonComplianceReason)
 }
 
 func TestCanonicalizeEmail_Gmail(t *testing.T) {
@@ -340,9 +340,9 @@ func TestCheckPullRequestCompliance_ListCommitsError(t *testing.T) {
 	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(nil, nil, err)
 
 	claSigners := config.ClaSigners{}
-	isCompliant, nonComplianceReason, retErr := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
-	assert.False(t, isCompliant)
-	assert.Equal(t, "", nonComplianceReason)
+	pullRequestStatus, retErr := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	assert.False(t, pullRequestStatus.Compliant)
+	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Equal(t, err, retErr)
 }
 
@@ -402,9 +402,9 @@ func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
 			},
 		},
 	}
-	isCompliant, nonComplianceReason, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
-	assert.True(t, isCompliant)
-	assert.Equal(t, "", nonComplianceReason)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	assert.True(t, pullRequestStatus.Compliant)
+	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
 }
 
@@ -437,8 +437,8 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 			},
 		},
 	}
-	isCompliant, nonComplianceReason, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
-	assert.False(t, isCompliant)
-	assert.Equal(t, "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization.", nonComplianceReason)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	assert.False(t, pullRequestStatus.Compliant)
+	assert.Equal(t, "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization.", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
 }
