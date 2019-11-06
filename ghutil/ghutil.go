@@ -189,12 +189,20 @@ func MatchAccount(account config.Account, accounts []config.Account) bool {
 	return false
 }
 
+type CommitStatus struct {
+	Compliant           bool
+	NonComplianceReason string
+	External            bool
+}
+
 // ProcessCommit processes a single commit and returns compliance status and
 // failure reason, if any.
-func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners) (commitIsCompliant bool, commitNonComplianceReason string) {
+func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners) CommitStatus {
 	logging.Infof("  - commit: %s", *commit.SHA)
 
-	commitIsCompliant = true
+	commitStatus := CommitStatus{
+		Compliant: true,
+	}
 
 	var authorName, authorEmail, authorLogin string
 	var committerName, committerEmail, committerLogin string
@@ -244,18 +252,18 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 	}
 
 	if authorName == "" || authorEmail == "" || authorLogin == "" {
-		commitIsCompliant = false
-		commitNonComplianceReason = "Please verify the author name, email, and GitHub username association are all correct and match CLA records."
+		commitStatus.Compliant = false
+		commitStatus.NonComplianceReason = "Please verify the author name, email, and GitHub username association are all correct and match CLA records."
 	}
 
 	if committerName == "" || committerEmail == "" || committerLogin == "" {
-		commitIsCompliant = false
-		commitNonComplianceReason = "Please verify the committer name, email, and GitHub username association are all correct and match CLA records."
+		commitStatus.Compliant = false
+		commitStatus.NonComplianceReason = "Please verify the committer name, email, and GitHub username association are all correct and match CLA records."
 	}
 
 	// Assuming the commit is compliant thus far, verify that both the author
 	// and committer (which could be the same person) have signed the CLA.
-	if commitIsCompliant {
+	if commitStatus.Compliant {
 		authorClaMatchFound := false
 		committerClaMatchFound := false
 
@@ -291,63 +299,70 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 		}
 
 		if !authorClaMatchFound {
-			commitNonComplianceReason = "Author of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
+			commitStatus.NonComplianceReason = "Author of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
 		}
 
 		if !committerClaMatchFound {
-			commitNonComplianceReason = "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
+			commitStatus.NonComplianceReason = "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization."
 		}
 
-		commitIsCompliant = commitIsCompliant && authorClaMatchFound && committerClaMatchFound
+		commitStatus.Compliant = commitStatus.Compliant && authorClaMatchFound && committerClaMatchFound
 	}
 
 	// Put it all together now for display.
 	logging.Infof("    author: %s <%s>, GitHub: %s", authorName, authorEmail, authorLogin)
 	logging.Infof("    committer: %s <%s>, GitHub: %s", committerName, committerEmail, committerLogin)
-	return
+	return commitStatus
 }
 
-func (ghc *GitHubClient) CheckPullRequestCompliance(ctx context.Context, orgName string, repoName string, pullNumber int, claSigners config.ClaSigners) (bool, string, error) {
-	var pullRequestIsCompliant bool
-	var pullRequestNonComplianceReason string
+type PullRequestStatus struct {
+	Compliant           bool
+	NonComplianceReason string
+	External            bool
+}
+
+func (ghc *GitHubClient) CheckPullRequestCompliance(ctx context.Context, orgName string, repoName string, pullNumber int, claSigners config.ClaSigners) (PullRequestStatus, error) {
+	pullRequestStatus := PullRequestStatus{
+		Compliant: false,
+	}
 
 	// List all commits for this PR
 	commits, _, err := ghc.PullRequests.ListCommits(ctx, orgName, repoName, pullNumber, nil)
 	if err != nil {
 		logging.Error("Error finding all commits on PR", pullNumber)
-		return pullRequestIsCompliant, pullRequestNonComplianceReason, err
+		return pullRequestStatus, err
 	}
 
 	// Start off with the base case that the PR is compliant and disqualify it if
 	// anything is amiss.
-	pullRequestIsCompliant = true
+	pullRequestStatus.Compliant = true
 
 	for _, commit := range commits {
-		commitIsCompliant, commitNonComplianceReason := ProcessCommit(commit, claSigners)
+		commitStatus := ProcessCommit(commit, claSigners)
 
-		if commitIsCompliant {
+		if commitStatus.Compliant {
 			logging.Info("    compliant: true")
 		} else {
-			logging.Info("    compliant: false:", commitNonComplianceReason)
-			pullRequestNonComplianceReason = commitNonComplianceReason
-			pullRequestIsCompliant = false
+			logging.Info("    compliant: false:", commitStatus.NonComplianceReason)
+			pullRequestStatus.NonComplianceReason = commitStatus.NonComplianceReason
+			pullRequestStatus.Compliant = false
 		}
 	}
-	return pullRequestIsCompliant, pullRequestNonComplianceReason, nil
+	return pullRequestStatus, nil
 }
 
 func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
 	logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
 
-	pullRequestIsCompliant, pullRequestNonComplianceReason, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, *pull.Number, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, *pull.Number, claSigners)
 	if err != nil {
 		return err
 	}
 
-	if pullRequestIsCompliant {
+	if pullRequestStatus.Compliant {
 		logging.Info("  PR is CLA-compliant")
 	} else {
-		logging.Info("  PR is NOT CLA-compliant:", pullRequestNonComplianceReason)
+		logging.Info("  PR is NOT CLA-compliant:", pullRequestStatus.NonComplianceReason)
 	}
 
 	if repoClaLabelStatus.HasYes && repoClaLabelStatus.HasNo {
@@ -396,7 +411,7 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 		}
 
 		// Add or remove [cla: yes] and [cla: no] labels, as appropriate.
-		if pullRequestIsCompliant {
+		if pullRequestStatus.Compliant {
 			// if PR has [cla: no] label, remove it.
 			if hasLabelClaNo {
 				removeLabel(LabelClaNo)
@@ -427,7 +442,7 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 			}
 
 			if labelsUpdatedForNonCompliance {
-				addComment(pullRequestNonComplianceReason)
+				addComment(pullRequestStatus.NonComplianceReason)
 			}
 		}
 	}
