@@ -15,7 +15,6 @@
 package ghutil_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -58,9 +57,9 @@ var (
 	ctrl    *gomock.Controller
 	ghc     *ghutil.GitHubClient
 	mockGhc *MockGitHubClient
-	ctx     context.Context
 
 	noLabel *github.Label = nil
+	any                   = gomock.Any()
 )
 
 const (
@@ -73,7 +72,6 @@ func setUp(t *testing.T) {
 	ctrl = gomock.NewController(t)
 	ghc = ghutil.NewBasicClient()
 	mockGhc = NewMockGitHubClient(ghc, ctrl)
-	ctx = context.Background()
 }
 
 func tearDown(_ *testing.T) {
@@ -86,9 +84,9 @@ func TestGetAllRepos_OrgAndRepo(t *testing.T) {
 
 	repo := github.Repository{}
 
-	mockGhc.Repositories.EXPECT().Get(ctx, orgName, repoName).Return(&repo, nil, nil)
+	mockGhc.Repositories.EXPECT().Get(any, orgName, repoName).Return(&repo, nil, nil)
 
-	repos := ghc.GetAllRepos(ghc, ctx, orgName, repoName)
+	repos := ghc.GetAllRepos(ghc, orgName, repoName)
 	assert.Equal(t, 1, len(repos), "repos is not of length 1: %v", repos)
 }
 
@@ -101,9 +99,9 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 		{},
 	}
 
-	mockGhc.Repositories.EXPECT().List(ctx, orgName, nil).Return(expectedRepos, nil, nil)
+	mockGhc.Repositories.EXPECT().List(any, orgName, nil).Return(expectedRepos, nil, nil)
 
-	actualRepos := ghc.GetAllRepos(ghc, ctx, orgName, "")
+	actualRepos := ghc.GetAllRepos(ghc, orgName, "")
 	assert.Equal(t, len(expectedRepos), len(actualRepos), "Expected repos: %v, actual repos: %v", expectedRepos, actualRepos)
 }
 
@@ -118,7 +116,7 @@ func expectRepoLabels(orgName string, repoName string, hasYes bool, hasNo bool, 
 		if exists {
 			ghLabel = &github.Label{}
 		}
-		mockGhc.Issues.EXPECT().GetLabel(ctx, orgName, repoName, label).Return(ghLabel, nil, nil)
+		mockGhc.Issues.EXPECT().GetLabel(any, orgName, repoName, label).Return(ghLabel, nil, nil)
 	}
 }
 
@@ -128,7 +126,7 @@ func TestVerifyRepoHasClaLabels_NoLabels(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, false, false, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, orgName, repoName)
 	assert.False(t, repoClaLabelStatus.HasYes)
 	assert.False(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -140,7 +138,7 @@ func TestGetRepoClaLabelStatus_HasYesOnly(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, true, false, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, orgName, repoName)
 	assert.True(t, repoClaLabelStatus.HasYes)
 	assert.False(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -152,7 +150,7 @@ func TestGetRepoClaLabelStatus_HasNoOnly(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, false, true, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, orgName, repoName)
 	assert.False(t, repoClaLabelStatus.HasYes)
 	assert.True(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -164,7 +162,7 @@ func TestGetRepoClaLabelStatus_YesAndNoLabels(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, true, true, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, orgName, repoName)
 	assert.True(t, repoClaLabelStatus.HasYes)
 	assert.True(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -176,7 +174,7 @@ func TestGetRepoClaLabelStatus_YesNoAndExternalLabels(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, true, true, true)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, orgName, repoName)
 	assert.True(t, repoClaLabelStatus.HasYes)
 	assert.True(t, repoClaLabelStatus.HasNo)
 	assert.True(t, repoClaLabelStatus.HasExternal)
@@ -339,10 +337,10 @@ func TestCheckPullRequestCompliance_ListCommitsError(t *testing.T) {
 	defer tearDown(t)
 
 	err := errors.New("Invalid PR")
-	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(nil, nil, err)
+	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(nil, nil, err)
 
 	claSigners := config.ClaSigners{}
-	pullRequestStatus, retErr := ghc.CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, retErr := ghc.CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners)
 	assert.False(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Equal(t, err, retErr)
@@ -388,7 +386,7 @@ func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
 		createCommit(sha1, name1, email1, login1),
 		createCommit(sha2, name2, email2, login2),
 	}
-	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
+	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -404,7 +402,7 @@ func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
 			},
 		},
 	}
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners)
 	assert.True(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
@@ -428,7 +426,7 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 		createCommit(sha1, name1, email1, login1),
 		createCommit(sha2, name2, email2, login2),
 	}
-	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
+	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -439,7 +437,7 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 			},
 		},
 	}
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners)
 	assert.False(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization.", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
@@ -461,10 +459,10 @@ func runProcessPullRequestTestScenario(t *testing.T, params ProcessPullRequest_T
 	claSigners := config.ClaSigners{}
 
 	ghc.CheckPullRequestCompliance = mockGhc.Api.CheckPullRequestCompliance
-	mockGhc.Api.EXPECT().CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners).Return(params.PullRequestStatus, nil)
+	mockGhc.Api.EXPECT().CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners).Return(params.PullRequestStatus, nil)
 
 	ghc.GetIssueClaLabelStatus = mockGhc.Api.GetIssueClaLabelStatus
-	mockGhc.Api.EXPECT().GetIssueClaLabelStatus(ghc, ctx, orgName, repoName, pullNumber).Return(params.IssueClaLabelStatus)
+	mockGhc.Api.EXPECT().GetIssueClaLabelStatus(ghc, orgName, repoName, pullNumber).Return(params.IssueClaLabelStatus)
 
 	localPullNumber := pullNumber
 	localPullTitle := "no title"
@@ -475,15 +473,15 @@ func runProcessPullRequestTestScenario(t *testing.T, params ProcessPullRequest_T
 
 	if params.UpdateRepo {
 		for _, label := range params.LabelsToAdd {
-			mockGhc.Issues.EXPECT().AddLabelsToIssue(ctx, orgName, repoName, pullNumber, []string{label}).Return(nil, nil, nil)
+			mockGhc.Issues.EXPECT().AddLabelsToIssue(any, orgName, repoName, pullNumber, []string{label}).Return(nil, nil, nil)
 		}
 
 		for _, label := range params.LabelsToRemove {
-			mockGhc.Issues.EXPECT().RemoveLabelForIssue(ctx, orgName, repoName, pullNumber, label).Return(nil, nil)
+			mockGhc.Issues.EXPECT().RemoveLabelForIssue(any, orgName, repoName, pullNumber, label).Return(nil, nil)
 		}
 	}
 
-	err := ghc.ProcessPullRequest(ghc, ctx, orgName, repoName, &pull, claSigners, params.RepoClaLabelStatus, params.UpdateRepo)
+	err := ghc.ProcessPullRequest(ghc, orgName, repoName, &pull, claSigners, params.RepoClaLabelStatus, params.UpdateRepo)
 	assert.Nil(t, err)
 }
 
@@ -515,7 +513,7 @@ func TestProcessPullRequest_RepoHasLabels_PullHasZeroLabels_NonCompliant_Update(
 	issueComment := github.IssueComment{
 		Body: &nonComplianceReason,
 	}
-	mockGhc.Issues.EXPECT().CreateComment(ctx, orgName, repoName, pullNumber, &issueComment).Return(nil, nil, nil)
+	mockGhc.Issues.EXPECT().CreateComment(any, orgName, repoName, pullNumber, &issueComment).Return(nil, nil, nil)
 
 	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
 		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
@@ -562,7 +560,7 @@ func TestProcessPullRequest_RepoHasLabels_PullHasYesLabel_NonCompliant(t *testin
 	issueComment := github.IssueComment{
 		Body: &nonComplianceReason,
 	}
-	mockGhc.Issues.EXPECT().CreateComment(ctx, orgName, repoName, pullNumber, &issueComment).Return(nil, nil, nil)
+	mockGhc.Issues.EXPECT().CreateComment(any, orgName, repoName, pullNumber, &issueComment).Return(nil, nil, nil)
 
 	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
 		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
