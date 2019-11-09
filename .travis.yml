@@ -47,4 +47,4 @@ before_script:
   - go generate ./...
 
 script:
-  - make test
+  - make test VERBOSE=1
