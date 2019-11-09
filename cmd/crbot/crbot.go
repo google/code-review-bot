@@ -87,5 +87,5 @@ func main() {
 		Pulls:      prNumbers,
 		UpdateRepo: *updateRepoFlag,
 	}
-	ghc.ProcessOrgRepo(ctx, repoSpec, claSigners)
+	ghc.ProcessOrgRepo(ghc, ctx, repoSpec, claSigners)
 }
