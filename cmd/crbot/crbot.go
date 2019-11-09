@@ -71,13 +71,11 @@ func main() {
 		}
 	}
 
-	ctx := context.Background()
-
 	// Configure authentication and connect to GitHub.
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: cfg.Auth},
 	)
-	tc := oauth2.NewClient(ctx, ts)
+	tc := oauth2.NewClient(context.Background(), ts)
 
 	// Process org and repo(s) specified on the command-line.
 	ghc := ghutil.NewClient(tc)
@@ -87,5 +85,5 @@ func main() {
 		Pulls:      prNumbers,
 		UpdateRepo: *updateRepoFlag,
 	}
-	ghc.ProcessOrgRepo(ghc, ctx, repoSpec, claSigners)
+	ghc.ProcessOrgRepo(ghc, repoSpec, claSigners)
 }
