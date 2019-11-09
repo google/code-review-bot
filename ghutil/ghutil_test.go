@@ -32,6 +32,7 @@ type MockGitHubClient struct {
 	PullRequests  *ghutil.MockPullRequestsService
 	Issues        *ghutil.MockIssuesService
 	Repositories  *ghutil.MockRepositoriesService
+	Api           *ghutil.MockGitHubUtilApi
 }
 
 func NewMockGitHubClient(ghc *ghutil.GitHubClient, ctrl *gomock.Controller) *MockGitHubClient {
@@ -40,6 +41,7 @@ func NewMockGitHubClient(ghc *ghutil.GitHubClient, ctrl *gomock.Controller) *Moc
 		PullRequests:  ghutil.NewMockPullRequestsService(ctrl),
 		Issues:        ghutil.NewMockIssuesService(ctrl),
 		Repositories:  ghutil.NewMockRepositoriesService(ctrl),
+		Api:           ghutil.NewMockGitHubUtilApi(ctrl),
 	}
 
 	// Patch the original GitHubClient with our mock services.
@@ -69,7 +71,7 @@ const (
 
 func setUp(t *testing.T) {
 	ctrl = gomock.NewController(t)
-	ghc = &ghutil.GitHubClient{}
+	ghc = ghutil.NewBasicClient()
 	mockGhc = NewMockGitHubClient(ghc, ctrl)
 	ctx = context.Background()
 }
@@ -86,7 +88,7 @@ func TestGetAllRepos_OrgAndRepo(t *testing.T) {
 
 	mockGhc.Repositories.EXPECT().Get(ctx, orgName, repoName).Return(&repo, nil, nil)
 
-	repos := ghc.GetAllRepos(ctx, orgName, repoName)
+	repos := ghc.GetAllRepos(ghc, ctx, orgName, repoName)
 	assert.Equal(t, 1, len(repos), "repos is not of length 1: %v", repos)
 }
 
@@ -101,7 +103,7 @@ func TestGetAllRepos_OrgOnly(t *testing.T) {
 
 	mockGhc.Repositories.EXPECT().List(ctx, orgName, nil).Return(expectedRepos, nil, nil)
 
-	actualRepos := ghc.GetAllRepos(ctx, orgName, "")
+	actualRepos := ghc.GetAllRepos(ghc, ctx, orgName, "")
 	assert.Equal(t, len(expectedRepos), len(actualRepos), "Expected repos: %v, actual repos: %v", expectedRepos, actualRepos)
 }
 
@@ -126,7 +128,7 @@ func TestVerifyRepoHasClaLabels_NoLabels(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, false, false, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
 	assert.False(t, repoClaLabelStatus.HasYes)
 	assert.False(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -138,7 +140,7 @@ func TestGetRepoClaLabelStatus_HasYesOnly(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, true, false, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
 	assert.True(t, repoClaLabelStatus.HasYes)
 	assert.False(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -150,7 +152,7 @@ func TestGetRepoClaLabelStatus_HasNoOnly(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, false, true, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
 	assert.False(t, repoClaLabelStatus.HasYes)
 	assert.True(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -162,7 +164,7 @@ func TestGetRepoClaLabelStatus_YesAndNoLabels(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, true, true, false)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
 	assert.True(t, repoClaLabelStatus.HasYes)
 	assert.True(t, repoClaLabelStatus.HasNo)
 	assert.False(t, repoClaLabelStatus.HasExternal)
@@ -174,7 +176,7 @@ func TestGetRepoClaLabelStatus_YesNoAndExternalLabels(t *testing.T) {
 
 	expectRepoLabels(orgName, repoName, true, true, true)
 
-	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+	repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
 	assert.True(t, repoClaLabelStatus.HasYes)
 	assert.True(t, repoClaLabelStatus.HasNo)
 	assert.True(t, repoClaLabelStatus.HasExternal)
@@ -340,7 +342,7 @@ func TestCheckPullRequestCompliance_ListCommitsError(t *testing.T) {
 	mockGhc.PullRequests.EXPECT().ListCommits(ctx, orgName, repoName, pullNumber, nil).Return(nil, nil, err)
 
 	claSigners := config.ClaSigners{}
-	pullRequestStatus, retErr := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, retErr := ghc.CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners)
 	assert.False(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Equal(t, err, retErr)
@@ -402,7 +404,7 @@ func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
 			},
 		},
 	}
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners)
 	assert.True(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
@@ -437,8 +439,186 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 			},
 		},
 	}
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners)
 	assert.False(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization.", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
+}
+
+type ProcessPullRequest_TestParams struct {
+	RepoClaLabelStatus  ghutil.RepoClaLabelStatus
+	IssueClaLabelStatus ghutil.IssueClaLabelStatus
+	PullRequestStatus   ghutil.PullRequestStatus
+	UpdateRepo          bool
+	LabelsToAdd         []string
+	LabelsToRemove      []string
+}
+
+func runProcessPullRequestTestScenario(t *testing.T, params ProcessPullRequest_TestParams) {
+	// Dummy CLA signers data as we don't actually need to use it here,
+	// since we're mocking out the functions that would otherwise process
+	// this data.
+	claSigners := config.ClaSigners{}
+
+	ghc.CheckPullRequestCompliance = mockGhc.Api.CheckPullRequestCompliance
+	mockGhc.Api.EXPECT().CheckPullRequestCompliance(ghc, ctx, orgName, repoName, pullNumber, claSigners).Return(params.PullRequestStatus, nil)
+
+	ghc.GetIssueClaLabelStatus = mockGhc.Api.GetIssueClaLabelStatus
+	mockGhc.Api.EXPECT().GetIssueClaLabelStatus(ghc, ctx, orgName, repoName, pullNumber).Return(params.IssueClaLabelStatus)
+
+	localPullNumber := pullNumber
+	localPullTitle := "no title"
+	pull := github.PullRequest{
+		Number: &localPullNumber,
+		Title:  &localPullTitle,
+	}
+
+	if params.UpdateRepo {
+		for _, label := range params.LabelsToAdd {
+			mockGhc.Issues.EXPECT().AddLabelsToIssue(ctx, orgName, repoName, pullNumber, []string{label}).Return(nil, nil, nil)
+		}
+
+		for _, label := range params.LabelsToRemove {
+			mockGhc.Issues.EXPECT().RemoveLabelForIssue(ctx, orgName, repoName, pullNumber, label).Return(nil, nil)
+		}
+	}
+
+	err := ghc.ProcessPullRequest(ghc, ctx, orgName, repoName, &pull, claSigners, params.RepoClaLabelStatus, params.UpdateRepo)
+	assert.Nil(t, err)
+}
+
+func TestProcessPullRequest_RepoHasLabels_PullHasZeroLabels_Compliant_Update(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes: true,
+			HasNo:  true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			Compliant: true,
+		},
+		UpdateRepo:  true,
+		LabelsToAdd: []string{ghutil.LabelClaYes},
+	})
+}
+
+func TestProcessPullRequest_RepoHasLabels_PullHasZeroLabels_NonCompliant_Update(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	// When adding a "cla: no" label, we will also add a comment to the
+	// effect of why this PR got that label.
+	nonComplianceReason := "Your PR is not compliant"
+	issueComment := github.IssueComment{
+		Body: &nonComplianceReason,
+	}
+	mockGhc.Issues.EXPECT().CreateComment(ctx, orgName, repoName, pullNumber, &issueComment).Return(nil, nil, nil)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes: true,
+			HasNo:  true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			Compliant:           false,
+			NonComplianceReason: nonComplianceReason,
+		},
+		UpdateRepo:  true,
+		LabelsToAdd: []string{ghutil.LabelClaNo},
+	})
+}
+
+func TestProcessPullRequest_RepoHasHabels_PullHasYesLabel_Compliant(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes: true,
+			HasNo:  true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{
+			HasYes: true,
+		},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			Compliant: true,
+		},
+		UpdateRepo: true,
+		// No labels to be added or removed in this case.
+	})
+}
+
+func TestProcessPullRequest_RepoHasLabels_PullHasYesLabel_NonCompliant(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	// When adding a "cla: no" label, we will also add a comment to the
+	// effect of why this PR got that label.
+	nonComplianceReason := "Your PR is not compliant"
+	issueComment := github.IssueComment{
+		Body: &nonComplianceReason,
+	}
+	mockGhc.Issues.EXPECT().CreateComment(ctx, orgName, repoName, pullNumber, &issueComment).Return(nil, nil, nil)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes: true,
+			HasNo:  true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{
+			HasYes: true,
+		},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			Compliant:           false,
+			NonComplianceReason: nonComplianceReason,
+		},
+		UpdateRepo:     true,
+		LabelsToAdd:    []string{ghutil.LabelClaNo},
+		LabelsToRemove: []string{ghutil.LabelClaYes},
+	})
+}
+
+func TestProcessPullRequest_RepoHasLabels_HasNoLabel_Compliant(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes: true,
+			HasNo:  true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{
+			HasNo: true,
+		},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			Compliant: true,
+		},
+		UpdateRepo:     true,
+		LabelsToAdd:    []string{ghutil.LabelClaYes},
+		LabelsToRemove: []string{ghutil.LabelClaNo},
+	})
+}
+
+func TestProcessPullRequest_RepoHasLabels_PullHasNoLabel_NonCompliant(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	runProcessPullRequestTestScenario(t, ProcessPullRequest_TestParams{
+		RepoClaLabelStatus: ghutil.RepoClaLabelStatus{
+			HasYes: true,
+			HasNo:  true,
+		},
+		IssueClaLabelStatus: ghutil.IssueClaLabelStatus{
+			HasNo: true,
+		},
+		PullRequestStatus: ghutil.PullRequestStatus{
+			Compliant: false,
+		},
+		UpdateRepo: true,
+		// No labels to be added or removed in this case.
+	})
 }

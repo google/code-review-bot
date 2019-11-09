@@ -15,7 +15,7 @@
 // TODO(mbrukman): in the future, consider using the recently-added
 // `-copyright_filename` flag: https://github.com/golang/mock/pull/234
 
-//go:generate mockgen -source ghutil.go -destination mock_ghutil.go -package ghutil
+//go:generate mockgen -source ghutil.go -destination mock_ghutil.go -package ghutil -self_package github.com/google/code-review-bot/ghutil
 package ghutil
 
 import (
@@ -65,8 +65,33 @@ type PullRequestsService interface {
 	ListCommits(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 }
 
+// GitHubUtilApi is the locally-defined API for interfacing with GitHub, using
+// the methods in GitHubClient.
+type GitHubUtilApi interface {
+	GetAllRepos(*GitHubClient, context.Context, string, string) []*github.Repository
+	CheckPullRequestCompliance(*GitHubClient, context.Context, string, string, int, config.ClaSigners) (PullRequestStatus, error)
+	ProcessPullRequest(*GitHubClient, context.Context, string, string, *github.PullRequest, config.ClaSigners, RepoClaLabelStatus, bool) error
+	ProcessOrgRepo(*GitHubClient, context.Context, GitHubProcessSpec, config.ClaSigners)
+	GetIssueClaLabelStatus(*GitHubClient, context.Context, string, string, int) IssueClaLabelStatus
+	GetRepoClaLabelStatusT(*GitHubClient, context.Context, string, string) RepoClaLabelStatus
+}
+
 // GitHubClient provides an interface to the GitHub APIs used in this module.
 type GitHubClient struct {
+	// Note: we can't simply use `*GitHubUtilApi` to import all the
+	// interface methods here, as they will not be assignable fields and
+	// compile will error out with:
+	//
+	//     cannot use promoted field GitHubUtilApi.GetAllRepos in struct literal of type GitHubClient
+	//
+	// for each of the methods listed here.
+	GetAllRepos                func(*GitHubClient, context.Context, string, string) []*github.Repository
+	CheckPullRequestCompliance func(*GitHubClient, context.Context, string, string, int, config.ClaSigners) (PullRequestStatus, error)
+	ProcessPullRequest         func(*GitHubClient, context.Context, string, string, *github.PullRequest, config.ClaSigners, RepoClaLabelStatus, bool) error
+	ProcessOrgRepo             func(*GitHubClient, context.Context, GitHubProcessSpec, config.ClaSigners)
+	GetIssueClaLabelStatus     func(*GitHubClient, context.Context, string, string, int) IssueClaLabelStatus
+	GetRepoClaLabelStatus      func(*GitHubClient, context.Context, string, string) RepoClaLabelStatus
+
 	Organizations OrganizationsService
 	Repositories  RepositoriesService
 	Issues        IssuesService
@@ -88,19 +113,36 @@ func NewClient(tc *http.Client) *GitHubClient {
 	client := github.NewClient(tc)
 	client.UserAgent = "cla-helper"
 
+	ghc := NewBasicClient()
+	ghc.Organizations = client.Organizations
+	ghc.PullRequests = client.PullRequests
+	ghc.Issues = client.Issues
+	ghc.Repositories = client.Repositories
+
+	return ghc
+}
+
+// NewBasicClient returns a new client with only local methods bound; no
+// external methods (which require an `http.Client`) are available so this
+// client is only partially-constructed and can be used either in production
+// with additional bindings added in `NewClient` or for testing by assigning
+// mocked methods for the other services.
+func NewBasicClient() *GitHubClient {
 	ghc := GitHubClient{
-		Organizations: client.Organizations,
-		PullRequests:  client.PullRequests,
-		Issues:        client.Issues,
-		Repositories:  client.Repositories,
+		GetAllRepos:                getAllRepos,
+		CheckPullRequestCompliance: checkPullRequestCompliance,
+		ProcessPullRequest:         processPullRequest,
+		ProcessOrgRepo:             processOrgRepo,
+		GetIssueClaLabelStatus:     getIssueClaLabelStatus,
+		GetRepoClaLabelStatus:      getRepoClaLabelStatus,
 	}
 
 	return &ghc
 }
 
-// GetAllRepos retrieves either a single repository (if `repoName` is non-empty)
+// getAllRepos retrieves either a single repository (if `repoName` is non-empty)
 // or all repositories in an organization of `repoName` is empty.
-func (ghc *GitHubClient) GetAllRepos(ctx context.Context, orgName string, repoName string) []*github.Repository {
+func getAllRepos(ghc *GitHubClient, ctx context.Context, orgName string, repoName string) []*github.Repository {
 	if repoName == "" {
 		repos, _, err := ghc.Repositories.List(ctx, orgName, nil)
 		if err != nil {
@@ -121,9 +163,9 @@ type RepoClaLabelStatus struct {
 	HasExternal bool
 }
 
-// GetRepoClaLabelStatus checks whether the given GitHub repo has the
+// getRepoClaLabelStatus checks whether the given GitHub repo has the
 // CLA-related labels defined.
-func (ghc *GitHubClient) GetRepoClaLabelStatus(ctx context.Context, orgName string, repoName string) (repoClaLabelStatus RepoClaLabelStatus) {
+func getRepoClaLabelStatus(ghc *GitHubClient, ctx context.Context, orgName string, repoName string) (repoClaLabelStatus RepoClaLabelStatus) {
 	repoHasLabel := func(labelName string) bool {
 		label, _, err := ghc.Issues.GetLabel(ctx, orgName, repoName, labelName)
 		return label != nil && err == nil
@@ -141,7 +183,7 @@ type IssueClaLabelStatus struct {
 	HasExternal bool
 }
 
-func (ghc *GitHubClient) GetIssueClaLabelStatus(ctx context.Context, orgName string, repoName string, pullNumber int) (issueClaLabelStatus IssueClaLabelStatus) {
+func getIssueClaLabelStatus(ghc *GitHubClient, ctx context.Context, orgName string, repoName string, pullNumber int) (issueClaLabelStatus IssueClaLabelStatus) {
 	labels, _, err := ghc.Issues.ListLabelsByIssue(ctx, orgName, repoName, pullNumber, nil)
 	if err != nil {
 		logging.Errorf("Error listing labels for repo '%s/%s, PR %d: %v", orgName, repoName, pullNumber, err)
@@ -321,7 +363,7 @@ type PullRequestStatus struct {
 	External            bool
 }
 
-func (ghc *GitHubClient) CheckPullRequestCompliance(ctx context.Context, orgName string, repoName string, pullNumber int, claSigners config.ClaSigners) (PullRequestStatus, error) {
+func checkPullRequestCompliance(ghc *GitHubClient, ctx context.Context, orgName string, repoName string, pullNumber int, claSigners config.ClaSigners) (PullRequestStatus, error) {
 	pullRequestStatus := PullRequestStatus{
 		Compliant: false,
 	}
@@ -351,10 +393,10 @@ func (ghc *GitHubClient) CheckPullRequestCompliance(ctx context.Context, orgName
 	return pullRequestStatus, nil
 }
 
-func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
+func processPullRequest(ghc *GitHubClient, ctx context.Context, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
 	logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
 
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ctx, orgName, repoName, *pull.Number, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, ctx, orgName, repoName, *pull.Number, claSigners)
 	if err != nil {
 		return err
 	}
@@ -366,7 +408,7 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 	}
 
 	if repoClaLabelStatus.HasYes && repoClaLabelStatus.HasNo {
-		issueClaLabelStatus := ghc.GetIssueClaLabelStatus(ctx, orgName, repoName, *pull.Number)
+		issueClaLabelStatus := ghc.GetIssueClaLabelStatus(ghc, ctx, orgName, repoName, *pull.Number)
 		var hasLabelClaYes bool = issueClaLabelStatus.HasYes
 		var hasLabelClaNo bool = issueClaLabelStatus.HasNo
 		logging.Infof("  CLA label status [%s]: %v, [%s]: %v", LabelClaYes, hasLabelClaYes, LabelClaNo, hasLabelClaNo)
@@ -449,13 +491,13 @@ func (ghc *GitHubClient) ProcessPullRequest(ctx context.Context, orgName string,
 	return nil
 }
 
-// ProcessOrgRepo handles all PRs in specified repos in the organization or user
+// processOrgRepo handles all PRs in specified repos in the organization or user
 // account. If `repoName` is empty, it processes all repos, if `repoName` is
 // non-empty, it processes the specified repo.
-func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProcessSpec, claSigners config.ClaSigners) {
+func processOrgRepo(ghc *GitHubClient, ctx context.Context, repoSpec GitHubProcessSpec, claSigners config.ClaSigners) {
 	// Retrieve all repositories for the given organization or user.
 	orgName := repoSpec.Org
-	repos := ghc.GetAllRepos(ctx, orgName, repoSpec.Repo)
+	repos := ghc.GetAllRepos(ghc, ctx, orgName, repoSpec.Repo)
 
 	// For repository, find all outstanding (non-closed / non-merged PRs)
 	for _, repo := range repos {
@@ -470,9 +512,9 @@ func (ghc *GitHubClient) ProcessOrgRepo(ctx context.Context, repoSpec GitHubProc
 		}
 
 		// Process each pull request for author & commiter CLA status.
-		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ctx, orgName, repoName)
+		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, ctx, orgName, repoName)
 		for _, pull := range pulls {
-			err := ghc.ProcessPullRequest(ctx, orgName, repoName, pull, claSigners, repoClaLabelStatus, repoSpec.UpdateRepo)
+			err := ghc.ProcessPullRequest(ghc, ctx, orgName, repoName, pull, claSigners, repoClaLabelStatus, repoSpec.UpdateRepo)
 			if err != nil {
 				logging.Errorf("Error processing PR %d: %s", *pull.Number, err)
 			}
