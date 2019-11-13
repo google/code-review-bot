@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package ghutil provides utility methods for determining CLA compliance of
+// pull requests on GitHub repositories, and adding/removing labels and
+// comments.
+
 // TODO(mbrukman): in the future, consider using the recently-added
 // `-copyright_filename` flag: https://github.com/golang/mock/pull/234
 
@@ -157,6 +161,7 @@ func getAllRepos(ghc *GitHubClient, ctx context.Context, orgName string, repoNam
 	return []*github.Repository{repo}
 }
 
+// RepoClaLabelStatus provides the availability of CLA-related labels in the repo.
 type RepoClaLabelStatus struct {
 	HasYes      bool
 	HasNo       bool
@@ -177,12 +182,16 @@ func getRepoClaLabelStatus(ghc *GitHubClient, ctx context.Context, orgName strin
 	return
 }
 
+// IssueClaLabelStatus provides the settings of CLA-related labels for a
+// particular issue.
 type IssueClaLabelStatus struct {
 	HasYes      bool
 	HasNo       bool
 	HasExternal bool
 }
 
+// getIssueClaLabelStatus computes the settings of CLA-related Labels for a
+// specific issue.
 func getIssueClaLabelStatus(ghc *GitHubClient, ctx context.Context, orgName string, repoName string, pullNumber int) (issueClaLabelStatus IssueClaLabelStatus) {
 	labels, _, err := ghc.Issues.ListLabelsByIssue(ctx, orgName, repoName, pullNumber, nil)
 	if err != nil {
@@ -231,6 +240,8 @@ func MatchAccount(account config.Account, accounts []config.Account) bool {
 	return false
 }
 
+// CommitStatus provides a signal as to the CLA-compliance of a specific
+// commit.
 type CommitStatus struct {
 	Compliant           bool
 	NonComplianceReason string
@@ -357,12 +368,19 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 	return commitStatus
 }
 
+// PullRequestStatus provides the CLA status for the entire PR, which considers
+// all of the commits. In this case, any single commit being out of compliance
+// (or external) marks the entire PR as being out of compliance (or external).
+// The only way to have a fully-compliant PR is to have all commits on the PR
+// compliant.
 type PullRequestStatus struct {
 	Compliant           bool
 	NonComplianceReason string
 	External            bool
 }
 
+// checkPullRequestCompliance reports the compliance status of a pull request,
+// considering each of the commits included in the pull request.
 func checkPullRequestCompliance(ghc *GitHubClient, ctx context.Context, orgName string, repoName string, pullNumber int, claSigners config.ClaSigners) (PullRequestStatus, error) {
 	pullRequestStatus := PullRequestStatus{
 		Compliant: false,
@@ -393,6 +411,10 @@ func checkPullRequestCompliance(ghc *GitHubClient, ctx context.Context, orgName 
 	return pullRequestStatus, nil
 }
 
+// processPullRequest validates all the commits for a particular pull request,
+// and optionally adds/removes labels and comments on a pull request (if the PR
+// is non-compliant) to alert the code author and reviewers that they need to
+// hold off on reviewing thes changes until the relevant CLA has been signed.
 func processPullRequest(ghc *GitHubClient, ctx context.Context, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
 	logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
 
