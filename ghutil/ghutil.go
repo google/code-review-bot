@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO(mbrukman): in the future, consider using the recently-added
+// `-copyright_filename` flag: https://github.com/golang/mock/pull/234
+//
+//go:generate mockgen -source ghutil.go -destination mock_ghutil.go -package ghutil -self_package github.com/google/code-review-bot/ghutil
+
 // Package ghutil provides utility methods for determining CLA compliance of
 // pull requests on GitHub repositories, and adding/removing labels and
 // comments.
-
-// TODO(mbrukman): in the future, consider using the recently-added
-// `-copyright_filename` flag: https://github.com/golang/mock/pull/234
-
-//go:generate mockgen -source ghutil.go -destination mock_ghutil.go -package ghutil -self_package github.com/google/code-review-bot/ghutil
 package ghutil
 
 import (
