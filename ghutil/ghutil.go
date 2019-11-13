@@ -67,6 +67,7 @@ type IssuesService interface {
 type PullRequestsService interface {
 	List(ctx context.Context, owner string, repo string, opt *github.PullRequestListOptions) ([]*github.PullRequest, *github.Response, error)
 	ListCommits(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.RepositoryCommit, *github.Response, error)
+	Get(ctx context.Context, owner string, repo string, number int) (*github.PullRequest, *github.Response, error)
 }
 
 // GitHubUtilApi is the locally-defined API for interfacing with GitHub, using
@@ -77,7 +78,7 @@ type GitHubUtilApi interface {
 	ProcessPullRequest(*GitHubClient, GitHubProcessSinglePullSpec, config.ClaSigners, RepoClaLabelStatus) error
 	ProcessOrgRepo(*GitHubClient, GitHubProcessOrgRepoSpec, config.ClaSigners)
 	GetIssueClaLabelStatus(*GitHubClient, string, string, int) IssueClaLabelStatus
-	GetRepoClaLabelStatusT(*GitHubClient, string, string) RepoClaLabelStatus
+	GetRepoClaLabelStatus(*GitHubClient, string, string) RepoClaLabelStatus
 }
 
 // GitHubClient provides an interface to the GitHub APIs used in this module.
@@ -107,7 +108,7 @@ type GitHubClient struct {
 type GitHubProcessOrgRepoSpec struct {
 	Org               string
 	Repo              string
-	Pulls             []uint64
+	Pulls             []int
 	UpdateRepo        bool
 	UnknownAsExternal bool
 }
@@ -660,10 +661,21 @@ func processOrgRepo(ghc *GitHubClient, repoSpec GitHubProcessOrgRepoSpec, claSig
 
 		logging.Infof("Repo: %s/%s", orgName, repoName)
 
-		// Find all pull requests.
-		pulls, _, err := ghc.PullRequests.List(ctx, orgName, repoName, nil)
-		if err != nil {
-			logging.Fatalf("Error listing pull requests for %s/%s: %s", orgName, repoName, err)
+		var pulls []*github.PullRequest
+		if len(repoSpec.Pulls) > 0 {
+			for _, pullNumber := range repoSpec.Pulls {
+				pullRequest, _, err := ghc.PullRequests.Get(ctx, orgName, repoName, pullNumber)
+				if err == nil {
+					pulls = append(pulls, pullRequest)
+				}
+			}
+		} else {
+			// Find all pull requests for the given repo, if not specified.
+			retrievedPulls, _, err := ghc.PullRequests.List(ctx, orgName, repoName, nil)
+			if err != nil {
+				logging.Fatalf("Error listing pull requests for %s/%s: %s", orgName, repoName, err)
+			}
+			pulls = retrievedPulls
 		}
 
 		// Process each pull request for author & commiter CLA status.
