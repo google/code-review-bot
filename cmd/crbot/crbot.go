@@ -74,16 +74,16 @@ func main() {
 		repoName = cfg.Repo
 	}
 
-	prNumbers := make([]uint64, 0)
+	prNumbers := make([]int, 0)
 	if *prFlag != "" {
 		prElements := strings.Split(*prFlag, ",")
-		prNumbers := make([]uint64, len(prElements))
+		prNumbers = make([]int, len(prElements))
 		for idx, elt := range prElements {
-			num, err := strconv.ParseUint(elt, 10, 32)
+			num, err := strconv.ParseInt(elt, 10, 32)
 			if err != nil {
 				logging.Fatalf("Invalid value for flag -pr: %s", *prFlag)
 			}
-			prNumbers[idx] = num
+			prNumbers[idx] = int(num)
 		}
 	}
 

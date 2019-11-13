@@ -720,6 +720,118 @@ func TestProcessPullRequest_RepoHasLabels_PullHasNoLabel_External(t *testing.T) 
 	})
 }
 
+func TestProcessOrgRepo_SpecifiedPrs(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	localRepoName := repoName
+	repos := []*github.Repository{
+		{
+			Name: &localRepoName,
+		},
+	}
+
+	ghc.GetAllRepos = mockGhc.Api.GetAllRepos
+	mockGhc.Api.EXPECT().GetAllRepos(ghc, orgName, repoName).Return(repos)
+
+	pullNumber1 := 42
+	pullTitle1 := "pull 42 title"
+	pullRequest1 := github.PullRequest{
+		Number: &pullNumber1,
+		Title:  &pullTitle1,
+	}
+	pullNumber2 := 43
+	pullTitle2 := "pull 43 title"
+	pullRequest2 := github.PullRequest{
+		Number: &pullNumber2,
+		Title:  &pullTitle2,
+	}
+	mockGhc.PullRequests.EXPECT().Get(any, orgName, repoName, pullNumber1).Return(&pullRequest1, nil, nil)
+	mockGhc.PullRequests.EXPECT().Get(any, orgName, repoName, pullNumber2).Return(&pullRequest2, nil, nil)
+
+	repoClaLabelStatus := ghutil.RepoClaLabelStatus{}
+
+	ghc.GetRepoClaLabelStatus = mockGhc.Api.GetRepoClaLabelStatus
+	mockGhc.Api.EXPECT().GetRepoClaLabelStatus(ghc, orgName, repoName).Return(repoClaLabelStatus)
+
+	claSigners := config.ClaSigners{}
+
+	prSpec1 := ghutil.GitHubProcessSinglePullSpec{
+		Org:  orgName,
+		Repo: repoName,
+		Pull: &pullRequest1,
+	}
+	prSpec2 := ghutil.GitHubProcessSinglePullSpec{
+		Org:  orgName,
+		Repo: repoName,
+		Pull: &pullRequest2,
+	}
+	ghc.ProcessPullRequest = mockGhc.Api.ProcessPullRequest
+	mockGhc.Api.EXPECT().ProcessPullRequest(ghc, prSpec1, claSigners, repoClaLabelStatus)
+	mockGhc.Api.EXPECT().ProcessPullRequest(ghc, prSpec2, claSigners, repoClaLabelStatus)
+
+	repoSpec := ghutil.GitHubProcessOrgRepoSpec{
+		Org:   orgName,
+		Repo:  repoName,
+		Pulls: []int{pullNumber1, pullNumber2},
+	}
+	ghc.ProcessOrgRepo(ghc, repoSpec, claSigners)
+}
+
+func TestProcessOrgRepo_AllPrs(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	localRepoName := repoName
+	repos := []*github.Repository{
+		{
+			Name: &localRepoName,
+		},
+	}
+
+	ghc.GetAllRepos = mockGhc.Api.GetAllRepos
+	mockGhc.Api.EXPECT().GetAllRepos(ghc, orgName, repoName).Return(repos)
+
+	pullNumber1 := 42
+	pullTitle1 := "pull 42 title"
+	pullNumber2 := 43
+	pullTitle2 := "pull 43 title"
+	pullRequests := []*github.PullRequest{
+		{
+			Number: &pullNumber1,
+			Title:  &pullTitle1,
+		},
+		{
+			Number: &pullNumber2,
+			Title:  &pullTitle2,
+		},
+	}
+	mockGhc.PullRequests.EXPECT().List(any, orgName, repoName, nil).Return(pullRequests, nil, nil)
+
+	repoClaLabelStatus := ghutil.RepoClaLabelStatus{}
+
+	ghc.GetRepoClaLabelStatus = mockGhc.Api.GetRepoClaLabelStatus
+	mockGhc.Api.EXPECT().GetRepoClaLabelStatus(ghc, orgName, repoName).Return(repoClaLabelStatus)
+
+	claSigners := config.ClaSigners{}
+
+	ghc.ProcessPullRequest = mockGhc.Api.ProcessPullRequest
+	for _, pull := range pullRequests {
+		prSpec := ghutil.GitHubProcessSinglePullSpec{
+			Org:  orgName,
+			Repo: repoName,
+			Pull: pull,
+		}
+		mockGhc.Api.EXPECT().ProcessPullRequest(ghc, prSpec, claSigners, repoClaLabelStatus)
+	}
+
+	repoSpec := ghutil.GitHubProcessOrgRepoSpec{
+		Org:  orgName,
+		Repo: repoName,
+	}
+	ghc.ProcessOrgRepo(ghc, repoSpec, claSigners)
+}
+
 func createDataForClaExternalTesting() (config.Account, config.Account, []github.RepositoryCommit) {
 	john := config.Account{
 		Name:  "John Doe",
