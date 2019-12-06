@@ -17,6 +17,9 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 
@@ -28,18 +31,31 @@ import (
 )
 
 func main() {
-	configFileFlag := flag.String("config", "config.json", "Path to cfg file; required")
-	claSignersFileFlag := flag.String("cla-signers", "cla.json", "Path to CLA signers, required")
-	orgFlag := flag.String("org", "", "Name of organization or username; required if not set via cfg")
+	secretsFileFlag := flag.String("secrets", "", "Path to secrets file; required")
+	configFileFlag := flag.String("config", "", "Path to config file; optional")
+	claSignersFileFlag := flag.String("cla-signers", "", "Path to CLA signers; required")
+	orgFlag := flag.String("org", "", "Name of organization or username; required if not set in config file")
 	repoFlag := flag.String("repo", "", "Name of repo; if empty, implies all repos in org")
 	prFlag := flag.String("pr", "", "Comma-separated list of PRs to process")
 	updateRepoFlag := flag.Bool("update-repo", false, "Update labels on the repo")
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Syntax: %s [flags]\n\nFlags:\n", path.Base(os.Args[0]))
+		flag.PrintDefaults()
+		fmt.Fprintf(os.Stderr, "\nNote: -cla-signers, -config and -secrets accept YAML and JSON files.\n")
+	}
+
 	flag.Parse()
 
-	// Read and parse the general cfg file.
-	cfg := config.ParseConfig(*configFileFlag)
+	if *secretsFileFlag == "" {
+		logging.Fatalf("-secrets flag is required")
+	} else if *claSignersFileFlag == "" {
+		logging.Fatalf("-cla-signers flag is required")
+	}
 
-	// Read and parse the CLA signers file.
+	// Read and parse required auth, config, and CLA signers files.
+	secrets := config.ParseSecrets(*secretsFileFlag)
+	cfg := config.ParseConfig(*configFileFlag)
 	claSigners := config.ParseClaSigners(*claSignersFileFlag)
 
 	// Get the org name from command-line flags or config file.
@@ -49,7 +65,7 @@ func main() {
 	} else if cfg.Org != "" {
 		orgName = cfg.Org
 	} else {
-		logging.Fatalf("-org must be non-empty or `org` must be specified in cfg file")
+		logging.Fatalf("-org must be non-empty or `org` must be specified in config file")
 	}
 
 	// Get the repo name from command-line flags or config file.
@@ -73,7 +89,7 @@ func main() {
 
 	// Configure authentication and connect to GitHub.
 	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: cfg.Auth},
+		&oauth2.Token{AccessToken: secrets.Auth},
 	)
 	tc := oauth2.NewClient(context.Background(), ts)
 
