@@ -25,11 +25,15 @@ import (
 	"github.com/google/code-review-bot/logging"
 )
 
-// Config is the configuration for the `crbot` tool to specify the
-// authentication it should use and the scope at which it should run, whether
-// for all repos in a single organization, or a single specific repo.
-type Config struct {
+// Secrets contains the authentication credentials for interacting with GitHub.
+type Secrets struct {
 	Auth string `json:"auth" yaml:"auth"`
+}
+
+// Config is the configuration for the `crbot` tool to specify the scope at
+// which it should run, whether for all repos in a single organization, or a
+// single specific repo.
+type Config struct {
 	Org  string `json:"org,omitempty" yaml:"org,omitempty"`
 	Repo string `json:"repo,omitempty" yaml:"repo,omitempty"`
 }
@@ -58,50 +62,48 @@ type ClaSigners struct {
 	Companies []Company `json:"companies,omitempty" yaml:"companies,omitempty"`
 }
 
-// ParseConfig parses the config from a YAML or JSON file and returns a `Config`
-// object.
-func ParseConfig(filename string) Config {
+// parseFile is a helper method for parsing any of the YAML or JSON files we
+// need to load: secrets, config, or CLA signers.
+func parseFile(filetype string, filename string, data interface{}) {
 	fileContents, err := ioutil.ReadFile(filename)
 	if err != nil {
-		logging.Fatalf("Error reading config file (%s): %s", filename, err)
+		logging.Fatalf("Error reading %s file '%s': %s", filetype, filename, err)
 	}
 
-	var config Config
 	if strings.HasSuffix(filename, ".json") {
-		err = json.Unmarshal(fileContents, &config)
+		err = json.Unmarshal(fileContents, data)
 	} else if strings.HasSuffix(filename, ".yaml") || strings.HasSuffix(filename, ".yml") {
-		err = yaml.Unmarshal(fileContents, &config)
+		err = yaml.Unmarshal(fileContents, data)
 	} else {
-		err = errors.New("unrecognized file type")
+		err = errors.New("unsupported file type; accepted: *.json, *.yaml, *.yml")
 	}
 
 	if err != nil {
-		logging.Fatalf("Error parsing config file (%s): %s", filename, err)
+		logging.Fatalf("Error parsing %s file '%s': %s", filetype, filename, err)
 	}
+}
 
+// ParseSecretes parses the secrets (including auth tokens) from a YAML or JSON file.
+func ParseSecrets(filename string) Secrets {
+	var secrets Secrets
+	parseFile("secrets", filename, &secrets)
+	return secrets
+}
+
+// ParseConfig parses the config from a YAML or JSON file.
+func ParseConfig(filename string) Config {
+	var config Config
+	// This config file is optional, so we shouldn't fail if the filename
+	// is an empty string, but just return an uninitialized Config struct.
+	if filename != "" {
+		parseFile("config", filename, &config)
+	}
 	return config
 }
 
-// ParseClaSigners parses the CLA signers config from a YAML or JSON file and
-// returns a `ClaSigners` object.
+// ParseClaSigners parses the CLA signers config from a YAML or JSON file.
 func ParseClaSigners(filename string) ClaSigners {
-	fileContents, err := ioutil.ReadFile(filename)
-	if err != nil {
-		logging.Fatalf("Error reading CLA Signers file (%s): %s", filename, err)
-	}
-
 	var claSigners ClaSigners
-	if strings.HasSuffix(filename, ".json") {
-		err = json.Unmarshal(fileContents, &claSigners)
-	} else if strings.HasSuffix(filename, ".yaml") || strings.HasSuffix(filename, ".yml") {
-		err = yaml.Unmarshal(fileContents, &claSigners)
-	} else {
-		err = errors.New("unrecognized file type")
-	}
-
-	if err != nil {
-		logging.Fatalf("Error parsing CLA Signers file (%s): %s", filename, err)
-	}
-
+	parseFile("CLA signers", filename, &claSigners)
 	return claSigners
 }
