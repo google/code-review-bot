@@ -73,9 +73,9 @@ type PullRequestsService interface {
 // the methods in GitHubClient.
 type GitHubUtilApi interface {
 	GetAllRepos(*GitHubClient, string, string) []*github.Repository
-	CheckPullRequestCompliance(*GitHubClient, string, string, int, config.ClaSigners) (PullRequestStatus, error)
-	ProcessPullRequest(*GitHubClient, string, string, *github.PullRequest, config.ClaSigners, RepoClaLabelStatus, bool) error
-	ProcessOrgRepo(*GitHubClient, GitHubProcessSpec, config.ClaSigners)
+	CheckPullRequestCompliance(*GitHubClient, GitHubProcessSinglePullSpec, config.ClaSigners) (PullRequestStatus, error)
+	ProcessPullRequest(*GitHubClient, GitHubProcessSinglePullSpec, config.ClaSigners, RepoClaLabelStatus) error
+	ProcessOrgRepo(*GitHubClient, GitHubProcessOrgRepoSpec, config.ClaSigners)
 	GetIssueClaLabelStatus(*GitHubClient, string, string, int) IssueClaLabelStatus
 	GetRepoClaLabelStatusT(*GitHubClient, string, string) RepoClaLabelStatus
 }
@@ -90,9 +90,9 @@ type GitHubClient struct {
 	//
 	// for each of the methods listed here.
 	GetAllRepos                func(*GitHubClient, string, string) []*github.Repository
-	CheckPullRequestCompliance func(*GitHubClient, string, string, int, config.ClaSigners) (PullRequestStatus, error)
-	ProcessPullRequest         func(*GitHubClient, string, string, *github.PullRequest, config.ClaSigners, RepoClaLabelStatus, bool) error
-	ProcessOrgRepo             func(*GitHubClient, GitHubProcessSpec, config.ClaSigners)
+	CheckPullRequestCompliance func(*GitHubClient, GitHubProcessSinglePullSpec, config.ClaSigners) (PullRequestStatus, error)
+	ProcessPullRequest         func(*GitHubClient, GitHubProcessSinglePullSpec, config.ClaSigners, RepoClaLabelStatus) error
+	ProcessOrgRepo             func(*GitHubClient, GitHubProcessOrgRepoSpec, config.ClaSigners)
 	GetIssueClaLabelStatus     func(*GitHubClient, string, string, int) IssueClaLabelStatus
 	GetRepoClaLabelStatus      func(*GitHubClient, string, string) RepoClaLabelStatus
 
@@ -102,13 +102,22 @@ type GitHubClient struct {
 	PullRequests  PullRequestsService
 }
 
-// GitHubProcessSpec is the specification of the work to be done: for a single
-// organization and repo, the set of pull requests that need to be processed and
-// whether or not this tool should mutate the repo state.
-type GitHubProcessSpec struct {
+// GitHubProcessOrgRepoSpec is the specification of the work to be done for an
+// organization and repo (possibly multiple PRs).
+type GitHubProcessOrgRepoSpec struct {
 	Org        string
 	Repo       string
 	Pulls      []uint64
+	UpdateRepo bool
+}
+
+// GitHubProcessSinglePullSpec is the specification of work to be processed for
+// a single PR, carrying over the rest of the configuration settings from
+// GitHubProcessOrgRepoSpec.
+type GitHubProcessSinglePullSpec struct {
+	Org        string
+	Repo       string
+	Pull       *github.PullRequest
 	UpdateRepo bool
 }
 
@@ -384,14 +393,16 @@ type PullRequestStatus struct {
 
 // checkPullRequestCompliance reports the compliance status of a pull request,
 // considering each of the commits included in the pull request.
-func checkPullRequestCompliance(ghc *GitHubClient, orgName string, repoName string, pullNumber int, claSigners config.ClaSigners) (PullRequestStatus, error) {
+func checkPullRequestCompliance(ghc *GitHubClient, prSpec GitHubProcessSinglePullSpec, claSigners config.ClaSigners) (PullRequestStatus, error) {
 	ctx := context.Background()
 	pullRequestStatus := PullRequestStatus{
 		Compliant: false,
 	}
 
+	pullNumber := *prSpec.Pull.Number
+
 	// List all commits for this PR
-	commits, _, err := ghc.PullRequests.ListCommits(ctx, orgName, repoName, pullNumber, nil)
+	commits, _, err := ghc.PullRequests.ListCommits(ctx, prSpec.Org, prSpec.Repo, pullNumber, nil)
 	if err != nil {
 		logging.Error("Error finding all commits on PR", pullNumber)
 		return pullRequestStatus, err
@@ -419,11 +430,17 @@ func checkPullRequestCompliance(ghc *GitHubClient, orgName string, repoName stri
 // and optionally adds/removes labels and comments on a pull request (if the PR
 // is non-compliant) to alert the code author and reviewers that they need to
 // hold off on reviewing thes changes until the relevant CLA has been signed.
-func processPullRequest(ghc *GitHubClient, orgName string, repoName string, pull *github.PullRequest, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus, updateRepo bool) error {
+func processPullRequest(ghc *GitHubClient, prSpec GitHubProcessSinglePullSpec, claSigners config.ClaSigners, repoClaLabelStatus RepoClaLabelStatus) error {
 	ctx := context.Background()
+
+	orgName := prSpec.Org
+	repoName := prSpec.Repo
+	pull := prSpec.Pull
+	updateRepo := prSpec.UpdateRepo
+
 	logging.Infof("PR %d: %s", *pull.Number, *pull.Title)
 
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, orgName, repoName, *pull.Number, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, prSpec, claSigners)
 	if err != nil {
 		return err
 	}
@@ -521,7 +538,7 @@ func processPullRequest(ghc *GitHubClient, orgName string, repoName string, pull
 // processOrgRepo handles all PRs in specified repos in the organization or user
 // account. If `repoName` is empty, it processes all repos, if `repoName` is
 // non-empty, it processes the specified repo.
-func processOrgRepo(ghc *GitHubClient, repoSpec GitHubProcessSpec, claSigners config.ClaSigners) {
+func processOrgRepo(ghc *GitHubClient, repoSpec GitHubProcessOrgRepoSpec, claSigners config.ClaSigners) {
 	ctx := context.Background()
 	// Retrieve all repositories for the given organization or user.
 	orgName := repoSpec.Org
@@ -542,7 +559,13 @@ func processOrgRepo(ghc *GitHubClient, repoSpec GitHubProcessSpec, claSigners co
 		// Process each pull request for author & commiter CLA status.
 		repoClaLabelStatus := ghc.GetRepoClaLabelStatus(ghc, orgName, repoName)
 		for _, pull := range pulls {
-			err := ghc.ProcessPullRequest(ghc, orgName, repoName, pull, claSigners, repoClaLabelStatus, repoSpec.UpdateRepo)
+			prSpec := GitHubProcessSinglePullSpec{
+				Org:        orgName,
+				Repo:       repoName,
+				Pull:       pull,
+				UpdateRepo: repoSpec.UpdateRepo,
+			}
+			err := ghc.ProcessPullRequest(ghc, prSpec, claSigners, repoClaLabelStatus)
 			if err != nil {
 				logging.Errorf("Error processing PR %d: %s", *pull.Number, err)
 			}
