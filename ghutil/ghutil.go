@@ -153,6 +153,35 @@ func NewBasicClient() *GitHubClient {
 	return &ghc
 }
 
+// AuthorLogin retrieves the author from a `RepositoryCommit`.
+//
+// Per go-github project docs in `github/repos_commits.go`:
+//
+// > RepositoryCommit represents a commit in a repo.
+// > Note that it's wrapping a Commit, so author/committer information is
+// > in two places, but contain different details about them: in
+// > RepositoryCommit "github details", in Commit - "git details".
+func AuthorLogin(c *github.RepositoryCommit) string {
+	if c.Author != nil {
+		if c.Author.Login != nil {
+			return *c.Author.Login
+		}
+	}
+	return ""
+}
+
+// CommitterLogin retrieves the committer from a `RepositoryCommit`.
+//
+// See also the docs for `AuthorLogin` for additional information.
+func CommitterLogin(c *github.RepositoryCommit) string {
+	if c.Committer != nil {
+		if c.Committer.Login != nil {
+			return *c.Committer.Login
+		}
+	}
+	return ""
+}
+
 // getAllRepos retrieves either a single repository (if `repoName` is non-empty)
 // or all repositories in an organization of `repoName` is empty.
 func getAllRepos(ghc *GitHubClient, orgName string, repoName string) []*github.Repository {
@@ -269,29 +298,10 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 		Compliant: true,
 	}
 
-	var authorName, authorEmail, authorLogin string
-	var committerName, committerEmail, committerLogin string
-
-	// Per go-github project docs in `github/repos_commits.go`:
-	//
-	// > RepositoryCommit represents a commit in a repo.
-	// > Note that it's wrapping a Commit, so author/committer information is
-	// > in two places, but contain different details about them: in RepositoryCommit "github
-	// > details", in Commit - "git details".
-
-	// Only GitHub information can be found here (username only).
-	if commit.Author != nil {
-		if commit.Author.Login != nil {
-			authorLogin = *commit.Author.Login
-		}
-	}
-
-	// Only GitHub information can be found here (username only).
-	if commit.Committer != nil {
-		if commit.Committer.Login != nil {
-			committerLogin = *commit.Committer.Login
-		}
-	}
+	authorLogin := AuthorLogin(commit)
+	committerLogin := CommitterLogin(commit)
+	var authorName, authorEmail string
+	var committerName, committerEmail string
 
 	// Only Git information can be found here (name and email only).
 	if commit.Commit != nil {
