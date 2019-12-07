@@ -332,6 +332,21 @@ func TestGmailAddress_PeriodsDoNotMatchCLA(t *testing.T) {
 	}
 }
 
+func getSinglePullSpec() ghutil.GitHubProcessSinglePullSpec {
+	localPullNumber := pullNumber
+	localPullTitle := "no title"
+	pull := github.PullRequest{
+		Number: &localPullNumber,
+		Title:  &localPullTitle,
+	}
+
+	return ghutil.GitHubProcessSinglePullSpec{
+		Org:  orgName,
+		Repo: repoName,
+		Pull: &pull,
+	}
+}
+
 func TestCheckPullRequestCompliance_ListCommitsError(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
@@ -339,8 +354,9 @@ func TestCheckPullRequestCompliance_ListCommitsError(t *testing.T) {
 	err := errors.New("Invalid PR")
 	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(nil, nil, err)
 
+	prSpec := getSinglePullSpec()
 	claSigners := config.ClaSigners{}
-	pullRequestStatus, retErr := ghc.CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, retErr := ghc.CheckPullRequestCompliance(ghc, prSpec, claSigners)
 	assert.False(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Equal(t, err, retErr)
@@ -388,6 +404,7 @@ func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
 	}
 	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
 
+	prSpec := getSinglePullSpec()
 	claSigners := config.ClaSigners{
 		People: []config.Account{
 			{
@@ -402,7 +419,7 @@ func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
 			},
 		},
 	}
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, prSpec, claSigners)
 	assert.True(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
@@ -428,6 +445,7 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 	}
 	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
 
+	prSpec := getSinglePullSpec()
 	claSigners := config.ClaSigners{
 		People: []config.Account{
 			{
@@ -437,7 +455,7 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 			},
 		},
 	}
-	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners)
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, prSpec, claSigners)
 	assert.False(t, pullRequestStatus.Compliant)
 	assert.Equal(t, "Committer of one or more commits is not listed as a CLA signer, either individual or as a member of an organization.", pullRequestStatus.NonComplianceReason)
 	assert.Nil(t, err)
@@ -458,18 +476,14 @@ func runProcessPullRequestTestScenario(t *testing.T, params ProcessPullRequest_T
 	// this data.
 	claSigners := config.ClaSigners{}
 
+	prSpec := getSinglePullSpec()
+	prSpec.UpdateRepo = params.UpdateRepo
+
 	ghc.CheckPullRequestCompliance = mockGhc.Api.CheckPullRequestCompliance
-	mockGhc.Api.EXPECT().CheckPullRequestCompliance(ghc, orgName, repoName, pullNumber, claSigners).Return(params.PullRequestStatus, nil)
+	mockGhc.Api.EXPECT().CheckPullRequestCompliance(ghc, prSpec, claSigners).Return(params.PullRequestStatus, nil)
 
 	ghc.GetIssueClaLabelStatus = mockGhc.Api.GetIssueClaLabelStatus
 	mockGhc.Api.EXPECT().GetIssueClaLabelStatus(ghc, orgName, repoName, pullNumber).Return(params.IssueClaLabelStatus)
-
-	localPullNumber := pullNumber
-	localPullTitle := "no title"
-	pull := github.PullRequest{
-		Number: &localPullNumber,
-		Title:  &localPullTitle,
-	}
 
 	if params.UpdateRepo {
 		for _, label := range params.LabelsToAdd {
@@ -481,7 +495,7 @@ func runProcessPullRequestTestScenario(t *testing.T, params ProcessPullRequest_T
 		}
 	}
 
-	err := ghc.ProcessPullRequest(ghc, orgName, repoName, &pull, claSigners, params.RepoClaLabelStatus, params.UpdateRepo)
+	err := ghc.ProcessPullRequest(ghc, prSpec, claSigners, params.RepoClaLabelStatus)
 	assert.Nil(t, err)
 }
 
