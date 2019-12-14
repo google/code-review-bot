@@ -1010,7 +1010,9 @@ func TestIsExternal_JaneIsUnlisted_UnknownAsExternal(t *testing.T) {
 	}
 
 	commits := []*github.RepositoryCommit{
+		createCommit(john, jane),
 		createCommit(jane, jane),
+		createCommit(jane, john),
 	}
 
 	for _, commit := range commits {
