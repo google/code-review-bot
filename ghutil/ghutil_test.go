@@ -230,54 +230,32 @@ func TestDifferentAuthorAndCommitter(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	sha := "12345abcde"
 	name := "John Doe"
 	corporateEmail := "john@github.com"
 	personalEmail := "john@gmail.com"
 	login := "johndoe"
 
+	personal := config.Account{
+		Name:  name,
+		Email: personalEmail,
+		Login: login,
+	}
+	corporate := config.Account{
+		Name:  name,
+		Email: corporateEmail,
+		Login: login,
+	}
+
 	claSigners := config.ClaSigners{
 		Companies: []config.Company{
 			{
-				Name: "Acme Inc.",
-				People: []config.Account{
-					{
-						// Corporate account
-						Name:  name,
-						Email: corporateEmail,
-						Login: login,
-					},
-					{
-						// Personal account
-						Name:  name,
-						Email: personalEmail,
-						Login: login,
-					},
-				},
+				Name:   "Acme Inc.",
+				People: []config.Account{corporate, personal},
 			},
 		},
 	}
-	commit := github.RepositoryCommit{
-		SHA: &sha,
-		Commit: &github.Commit{
-			Author: &github.CommitAuthor{
-				Name:  &name,
-				Email: &corporateEmail,
-			},
-			Committer: &github.CommitAuthor{
-				Name:  &name,
-				Email: &personalEmail,
-			},
-		},
-		Author: &github.User{
-			Login: &login,
-		},
-		Committer: &github.User{
-			Login: &login,
-		},
-	}
-
-	commitStatus := ghutil.ProcessCommit(&commit, claSigners)
+	commit := createCommit(corporate, personal)
+	commitStatus := ghutil.ProcessCommit(commit, claSigners)
 	assert.True(t, commitStatus.Compliant, "Commit should have been marked compliant; reason: ", commitStatus.NonComplianceReason)
 }
 
@@ -362,24 +340,30 @@ func TestCheckPullRequestCompliance_ListCommitsError(t *testing.T) {
 	assert.Equal(t, err, retErr)
 }
 
-func createCommit(sha string, name string, email string, login string) *github.RepositoryCommit {
+func createCommit(author config.Account, committer config.Account) *github.RepositoryCommit {
+	// Uniqueness of SHA fingerprints for commits is not an invariant
+	// that's required or enforced anywhere; we just need a non-null value
+	// here, so it's OK to use the same value for all commits to avoid
+	// dummy data in our test code.
+	sha := "abc123def456"
+
 	return &github.RepositoryCommit{
 		SHA: &sha,
 		Commit: &github.Commit{
 			Author: &github.CommitAuthor{
-				Name:  &name,
-				Email: &email,
+				Name:  &author.Name,
+				Email: &author.Email,
 			},
 			Committer: &github.CommitAuthor{
-				Name:  &name,
-				Email: &email,
+				Name:  &committer.Name,
+				Email: &committer.Email,
 			},
 		},
 		Author: &github.User{
-			Login: &login,
+			Login: &author.Login,
 		},
 		Committer: &github.User{
-			Login: &login,
+			Login: &committer.Login,
 		},
 	}
 }
@@ -388,36 +372,17 @@ func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	sha1 := "12345abcde"
-	name1 := "John Doe"
-	email1 := "john@example.com"
-	login1 := "john-doe"
-
-	sha2 := "abcde24680"
-	name2 := "Jane Doe"
-	email2 := "jane@example.com"
-	login2 := "jane-doe"
+	john, jane := createUserAccounts()
 
 	commits := []*github.RepositoryCommit{
-		createCommit(sha1, name1, email1, login1),
-		createCommit(sha2, name2, email2, login2),
+		createCommit(john, john),
+		createCommit(jane, jane),
 	}
 	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
 
 	prSpec := getSinglePullSpec()
 	claSigners := config.ClaSigners{
-		People: []config.Account{
-			{
-				Name:  name1,
-				Email: email1,
-				Login: login1,
-			},
-			{
-				Name:  name2,
-				Email: email2,
-				Login: login2,
-			},
-		},
+		People: []config.Account{john, jane},
 	}
 	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, prSpec, claSigners)
 	assert.True(t, pullRequestStatus.Compliant)
@@ -429,31 +394,17 @@ func TestCheckPullRequestCompliance_OneCompliantOneNot(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	sha1 := "12345abcde"
-	name1 := "John Doe"
-	email1 := "john@example.com"
-	login1 := "john-doe"
-
-	sha2 := "abcde24680"
-	name2 := "Jane Doe"
-	email2 := "jane@example.com"
-	login2 := "jane-doe"
+	john, jane := createUserAccounts()
 
 	commits := []*github.RepositoryCommit{
-		createCommit(sha1, name1, email1, login1),
-		createCommit(sha2, name2, email2, login2),
+		createCommit(john, john),
+		createCommit(jane, jane),
 	}
 	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
 
 	prSpec := getSinglePullSpec()
 	claSigners := config.ClaSigners{
-		People: []config.Account{
-			{
-				Name:  name1,
-				Email: email1,
-				Login: login1,
-			},
-		},
+		People: []config.Account{john},
 	}
 	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, prSpec, claSigners)
 	assert.False(t, pullRequestStatus.Compliant)
@@ -832,7 +783,7 @@ func TestProcessOrgRepo_AllPrs(t *testing.T) {
 	ghc.ProcessOrgRepo(ghc, repoSpec, claSigners)
 }
 
-func createDataForClaExternalTesting() (config.Account, config.Account, []github.RepositoryCommit) {
+func createUserAccounts() (config.Account, config.Account) {
 	john := config.Account{
 		Name:  "John Doe",
 		Email: "john@example.com",
@@ -843,28 +794,14 @@ func createDataForClaExternalTesting() (config.Account, config.Account, []github
 		Email: "jane@example.com",
 		Login: "jane-doe",
 	}
-
-	commits := []github.RepositoryCommit{
-		{
-			Author: &github.User{
-				Login: &jane.Login,
-			},
-		},
-		{
-			Committer: &github.User{
-				Login: &jane.Login,
-			},
-		},
-	}
-
-	return john, jane, commits
+	return john, jane
 }
 
 func TestIsExternal_JustJohnInPeople(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -872,9 +809,13 @@ func TestIsExternal_JustJohnInPeople(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(john, jane),
+	}
+
 	for _, commit := range commits {
-		assert.False(t, ghutil.IsExternal(&commit, claSigners, false),
-			"`%s` should not be considered external when not included", jane.Login)
+		assert.False(t, ghutil.IsExternal(commit, claSigners, false),
+			"commit should not be considered external: %v", *commit)
 	}
 }
 
@@ -882,7 +823,7 @@ func TestIsExternal_JohnAndJaneInPeople(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -891,9 +832,16 @@ func TestIsExternal_JohnAndJaneInPeople(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(john, john),
+		createCommit(john, jane),
+		createCommit(jane, john),
+		createCommit(jane, jane),
+	}
+
 	for _, commit := range commits {
-		assert.False(t, ghutil.IsExternal(&commit, claSigners, false),
-			"`%s` should not be considered external if part of People", jane.Login)
+		assert.False(t, ghutil.IsExternal(commit, claSigners, false),
+			"commit should not be considered external: %v", *commit)
 	}
 }
 
@@ -901,7 +849,7 @@ func TestIsExternal_JaneIsABot(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -912,9 +860,16 @@ func TestIsExternal_JaneIsABot(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(john, john),
+		createCommit(john, jane),
+		createCommit(jane, john),
+		createCommit(jane, jane),
+	}
+
 	for _, commit := range commits {
-		assert.False(t, ghutil.IsExternal(&commit, claSigners, false),
-			"`%s` should not be considered external if part of Bots", jane.Login)
+		assert.False(t, ghutil.IsExternal(commit, claSigners, false),
+			"commit should not be considered external: %v", *commit)
 	}
 }
 
@@ -922,7 +877,7 @@ func TestIsExternal_JaneIsExternalPerson(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -935,9 +890,15 @@ func TestIsExternal_JaneIsExternalPerson(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(john, jane),
+		createCommit(jane, jane),
+		createCommit(jane, john),
+	}
+
 	for _, commit := range commits {
-		assert.True(t, ghutil.IsExternal(&commit, claSigners, false),
-			"`%s` should be considered external", jane.Login)
+		assert.True(t, ghutil.IsExternal(commit, claSigners, false),
+			"commit should be considered external: %v", *commit)
 	}
 }
 
@@ -945,7 +906,7 @@ func TestIsExternal_JaneIsExternalBot(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -958,9 +919,15 @@ func TestIsExternal_JaneIsExternalBot(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(john, jane),
+		createCommit(jane, jane),
+		createCommit(jane, john),
+	}
+
 	for _, commit := range commits {
-		assert.True(t, ghutil.IsExternal(&commit, claSigners, false),
-			"`%s` should be considered external", jane.Login)
+		assert.True(t, ghutil.IsExternal(commit, claSigners, false),
+			"commit should be considered external: %v", *commit)
 	}
 }
 
@@ -968,7 +935,7 @@ func TestIsExternal_JaneIsExternalCorporate(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -986,9 +953,15 @@ func TestIsExternal_JaneIsExternalCorporate(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(john, jane),
+		createCommit(jane, jane),
+		createCommit(jane, john),
+	}
+
 	for _, commit := range commits {
-		assert.True(t, ghutil.IsExternal(&commit, claSigners, false),
-			"`%s` should be considered external", jane.Login)
+		assert.True(t, ghutil.IsExternal(commit, claSigners, false),
+			"commit should be considered external: %v", *commit)
 	}
 }
 
@@ -996,7 +969,7 @@ func TestIsExternal_JaneIsCorporate_UnknownAsExternal(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -1012,9 +985,15 @@ func TestIsExternal_JaneIsCorporate_UnknownAsExternal(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(john, jane),
+		createCommit(jane, jane),
+		createCommit(jane, john),
+	}
+
 	for _, commit := range commits {
-		assert.False(t, ghutil.IsExternal(&commit, claSigners, true),
-			"`%s` should be considered external", jane.Login)
+		assert.False(t, ghutil.IsExternal(commit, claSigners, true),
+			"commit should not be considered external: %v", *commit)
 	}
 }
 
@@ -1022,7 +1001,7 @@ func TestIsExternal_JaneIsUnlisted_UnknownAsExternal(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
-	john, jane, commits := createDataForClaExternalTesting()
+	john, jane := createUserAccounts()
 
 	claSigners := config.ClaSigners{
 		People: []config.Account{
@@ -1030,8 +1009,12 @@ func TestIsExternal_JaneIsUnlisted_UnknownAsExternal(t *testing.T) {
 		},
 	}
 
+	commits := []*github.RepositoryCommit{
+		createCommit(jane, jane),
+	}
+
 	for _, commit := range commits {
-		assert.True(t, ghutil.IsExternal(&commit, claSigners, true),
-			"`%s` should be considered external", jane.Login)
+		assert.True(t, ghutil.IsExternal(commit, claSigners, true),
+			"commit should be considered external: %v", *commit)
 	}
 }
