@@ -602,9 +602,9 @@ func IsExternal(commit *github.RepositoryCommit, claSigners config.ClaSigners, u
 		logins = append(logins, committerLogin)
 	}
 
-	matchLogins := func(logins []string, accounts []config.Account) bool {
-		for _, account := range accounts {
-			for _, username := range logins {
+	matchAny := func(logins []string, accounts []config.Account) bool {
+		for _, username := range logins {
+			for _, account := range accounts {
 				if username == account.Login {
 					return true
 				}
@@ -613,37 +613,47 @@ func IsExternal(commit *github.RepositoryCommit, claSigners config.ClaSigners, u
 		return false
 	}
 
+	matchAllWithRemainder := func(logins []string, accounts []config.Account) []string {
+		remainder := make([]string, 0)
+		for _, username := range logins {
+			found := false
+			for _, account := range accounts {
+				if username == account.Login {
+					found = true
+					break
+				}
+			}
+			if !found {
+				remainder = append(remainder, username)
+			}
+		}
+		return remainder
+	}
+
 	if claSigners.External != nil {
 		external := claSigners.External
-		if matchLogins(logins, external.People) ||
-			matchLogins(logins, external.Bots) {
+		if matchAny(logins, external.People) ||
+			matchAny(logins, external.Bots) {
 			return true
 		}
 
 		for _, company := range external.Companies {
-			if matchLogins(logins, company.People) {
+			if matchAny(logins, company.People) {
 				return true
 			}
 		}
 	}
 
-	// If the logins don't match any of the CLA Signers *and* the
+	// If any of the logins don't match any of the CLA Signers *and* the
 	// `unknownAsExternal` is true, then this is an externally-managed
 	// contributor.
-	if !matchLogins(logins, claSigners.People) && !matchLogins(logins, claSigners.Bots) {
-		claEntryFound := false
-		for _, company := range claSigners.Companies {
-			if matchLogins(logins, company.People) {
-				claEntryFound = true
-				break
-			}
-		}
-		if !claEntryFound && unknownAsExternal {
-			return true
-		}
+	remainder := matchAllWithRemainder(logins, claSigners.People)
+	remainder = matchAllWithRemainder(remainder, claSigners.Bots)
+	for _, company := range claSigners.Companies {
+		remainder = matchAllWithRemainder(remainder, company.People)
 	}
 
-	return false
+	return len(remainder) > 0 && unknownAsExternal
 }
 
 // processOrgRepo handles all PRs in specified repos in the organization or user
