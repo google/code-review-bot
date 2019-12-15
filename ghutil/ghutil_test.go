@@ -16,6 +16,7 @@ package ghutil_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -210,7 +211,7 @@ func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
 	// Credentials as provided by the user.
 	account := config.Account{
 		Name:  "Jane Doe",
-		Email: "Jane@example.com",
+		Email: "Jane.Doe@example.com",
 		Login: "janedoe",
 	}
 
@@ -218,7 +219,7 @@ func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
 	accounts := []config.Account{
 		{
 			Name:  "Jane Doe",
-			Email: "jane@example.com",
+			Email: "jane.doe@example.com",
 			Login: "JaneDoe",
 		},
 	}
@@ -226,7 +227,7 @@ func TestMatchAccount_DoesNotMatchCase(t *testing.T) {
 	assert.True(t, ghutil.MatchAccount(account, accounts))
 }
 
-func TestDifferentAuthorAndCommitter(t *testing.T) {
+func TestProcessCommit_DifferentAuthorAndCommitter(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
 
@@ -259,6 +260,35 @@ func TestDifferentAuthorAndCommitter(t *testing.T) {
 	assert.True(t, commitStatus.Compliant, "Commit should have been marked compliant; reason: ", commitStatus.NonComplianceReason)
 }
 
+func TestProcessCommit_DifferentCaseInCommitEmailVsCLA(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	userUC := config.Account{
+		Name:  "User Name",
+		Email: "User.Name@example.com",
+		Login: "User-Name",
+	}
+	userLC := config.Account{
+		Name:  userUC.Name,
+		Email: strings.ToLower(userUC.Email),
+		Login: strings.ToLower(userUC.Login),
+	}
+
+	claSigners := config.ClaSigners{
+		Companies: []config.Company{
+			{
+				Name:   "Acme, Inc.",
+				People: []config.Account{userUC},
+			},
+		},
+	}
+
+	commit := createCommit(userLC, userLC)
+	commitStatus := ghutil.ProcessCommit(commit, claSigners)
+	assert.True(t, commitStatus.Compliant, "Commit should have been marked compliant; reason: ", commitStatus.NonComplianceReason)
+}
+
 func TestCanonicalizeEmail_Gmail(t *testing.T) {
 	setUp(t)
 	defer tearDown(t)
@@ -269,6 +299,8 @@ func TestCanonicalizeEmail_Gmail(t *testing.T) {
 		"UserName@Gmail.Com":         "username@gmail.com",
 		"User.Name@Gmail.Com":        "username@gmail.com",
 		"U.s.e.r.N.a.m.e.@Gmail.Com": "username@gmail.com",
+		"User.Name@example.com":      "user.name@example.com",
+		"User.Name@Example.com":      "user.name@example.com",
 	}
 
 	for input, expected := range goldenInputOutput {
@@ -366,6 +398,41 @@ func createCommit(author config.Account, committer config.Account) *github.Repos
 			Login: &committer.Login,
 		},
 	}
+}
+
+func TestCheckPullRequestCompliance_OneCommitDifferentEmailCase(t *testing.T) {
+	setUp(t)
+	defer tearDown(t)
+
+	userUC := config.Account{
+		Name:  "User Name",
+		Email: "User.Name@example.com",
+		Login: "User-Name",
+	}
+	userLC := config.Account{
+		Name:  userUC.Name,
+		Email: strings.ToLower(userUC.Email),
+		Login: strings.ToLower(userUC.Login),
+	}
+
+	commits := []*github.RepositoryCommit{
+		createCommit(userLC, userLC),
+	}
+	mockGhc.PullRequests.EXPECT().ListCommits(any, orgName, repoName, pullNumber, nil).Return(commits, nil, nil)
+
+	prSpec := getSinglePullSpec()
+	claSigners := config.ClaSigners{
+		Companies: []config.Company{
+			{
+				Name:   "Acme, Inc.",
+				People: []config.Account{userUC},
+			},
+		},
+	}
+	pullRequestStatus, err := ghc.CheckPullRequestCompliance(ghc, prSpec, claSigners)
+	assert.True(t, pullRequestStatus.Compliant)
+	assert.Equal(t, "", pullRequestStatus.NonComplianceReason)
+	assert.Nil(t, err)
 }
 
 func TestCheckPullRequestCompliance_TwoCompliantCommits(t *testing.T) {

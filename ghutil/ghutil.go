@@ -346,16 +346,6 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 		authorClaMatchFound := false
 		committerClaMatchFound := false
 
-		matchAccount := func(account config.Account, accounts []config.Account) bool {
-			for _, account2 := range accounts {
-				if account.Name == account2.Name && account.Email == account2.Email &&
-					account.Login == account2.Login {
-					return true
-				}
-			}
-			return false
-		}
-
 		author := config.Account{
 			Name:  authorName,
 			Email: authorEmail,
@@ -368,13 +358,13 @@ func ProcessCommit(commit *github.RepositoryCommit, claSigners config.ClaSigners
 			Login: committerLogin,
 		}
 
-		authorClaMatchFound = authorClaMatchFound || matchAccount(author, claSigners.People)
-		committerClaMatchFound = committerClaMatchFound || matchAccount(committer, claSigners.People)
-		committerClaMatchFound = committerClaMatchFound || matchAccount(committer, claSigners.Bots)
+		authorClaMatchFound = authorClaMatchFound || MatchAccount(author, claSigners.People)
+		committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, claSigners.People)
+		committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, claSigners.Bots)
 
 		for _, company := range claSigners.Companies {
-			authorClaMatchFound = authorClaMatchFound || matchAccount(author, company.People)
-			committerClaMatchFound = committerClaMatchFound || matchAccount(committer, company.People)
+			authorClaMatchFound = authorClaMatchFound || MatchAccount(author, company.People)
+			committerClaMatchFound = committerClaMatchFound || MatchAccount(committer, company.People)
 		}
 
 		if !authorClaMatchFound {
