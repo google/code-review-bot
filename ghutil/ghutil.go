@@ -522,14 +522,14 @@ func processPullRequest(ghc *GitHubClient, prSpec GitHubProcessSinglePullSpec, c
 
 		// No need to add any other CLA-related labels or comments to this PR.
 		return nil
+	}
+
+	if issueClaLabelStatus.HasExternal {
+		logging.Infof("  PR has [%s] label, but shouldn't", LabelClaExternal)
+		removeLabel(LabelClaExternal)
 	} else {
-		if issueClaLabelStatus.HasExternal {
-			logging.Infof("  PR has [%s] label, but shouldn't", LabelClaExternal)
-			removeLabel(LabelClaExternal)
-		} else {
-			logging.Infof("  PR doesn't have [%s] label, and shouldn't", LabelClaExternal)
-			// Nothing to do here.
-		}
+		logging.Infof("  PR doesn't have [%s] label, and shouldn't", LabelClaExternal)
+		// Nothing to do here.
 	}
 
 	if pullRequestStatus.Compliant {
