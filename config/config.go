@@ -94,7 +94,7 @@ func parseFile(filetype string, filename string, data interface{}) {
 	}
 }
 
-// ParseSecretes parses the secrets (including auth tokens) from a YAML or JSON file.
+// ParseSecrets parses the secrets (including auth tokens) from a YAML or JSON file.
 func ParseSecrets(filename string) Secrets {
 	var secrets Secrets
 	parseFile("secrets", filename, &secrets)
