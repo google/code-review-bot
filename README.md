@@ -46,8 +46,8 @@ $ ./crbot [options]
 Install [GoMock](https://github.com/golang/mock):
 
 ```bash
-$ go get github.com/golang/mock/gomock@v1.3.1
-$ go get github.com/golang/mock/mockgen@v1.3.1
+$ go get github.com/golang/mock/gomock@v1.4.0
+$ go get github.com/golang/mock/mockgen@v1.4.0
 ```
 
 Generate the mocks:

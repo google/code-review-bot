@@ -2,7 +2,7 @@ module github.com/google/code-review-bot
 
 require (
 	github.com/go-yaml/yaml v2.1.0+incompatible
-	github.com/golang/mock v1.3.1
+	github.com/golang/mock v1.4.0
 	github.com/google/go-github/v21 v21.0.0
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/stretchr/testify v1.4.0
