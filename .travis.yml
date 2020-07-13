@@ -1,4 +1,4 @@
-# Copyright 2019 Google Inc.
+# Copyright 2019 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,13 @@
 # limitations under the License.
 
 dist: bionic
-sudo: false
 
 language: go
 go:
   - "1.11.x"
   - "1.12.x"
   - "1.13.x"
-  - "master"
+  - "1.14.x"
 
 os:
   - linux
