@@ -1,11 +1,11 @@
 # Code Review Bot
 
-[![Build Status][travis-badge]][travis-url]
+[![Build Status][github-ci-badge]][github-ci-url]
 [![Go Report Card][go-report-card-badge]][go-report-card-url]
 [![API docs][godoc-badge]][godoc-url]
 
-[travis-badge]: https://travis-ci.org/google/code-review-bot.svg?branch=master
-[travis-url]: https://travis-ci.org/google/code-review-bot
+[github-ci-badge]: https://github.com/google/code-review-bot/actions/workflows/main.yml/badge.svg
+[github-ci-url]: https://github.com/google/code-review-bot/actions/workflows/main.yml
 [go-report-card-badge]: https://goreportcard.com/badge/github.com/google/code-review-bot
 [go-report-card-url]: https://goreportcard.com/report/github.com/google/code-review-bot
 [godoc-badge]: https://img.shields.io/badge/godoc-reference-5272B4.svg
@@ -13,14 +13,12 @@
 
 ## Prerequisites
 
-First, ensure that you have installed Go 1.11 or higher since we need the
-support for [Go modules via `go
-mod`](https://github.com/golang/go/wiki/Modules).
+Ensure that you have installed Go 1.11 or higher to enable support for [Go
+modules](https://github.com/golang/go/wiki/Modules) via `go mod`.
 
-On Travis CI, we also define the env var `GO111MODULE=on` to override the [Go
-1.5 `vendor` experiment](http://golang.org/s/go15vendor); you may not
-necessarily need this setting in your environment if you don't have Go 1.5
-`vendor` experiment also enabled.
+If you're using Go 1.11 or 1.12, set the environment variable `GO111MODULE=on`
+(Go 1.13 and later versions [automatically enable module
+support](https://blog.golang.org/modules2019)).
 
 ## Building
 
@@ -63,7 +61,8 @@ different code, including comments.
 To update the versions of these tools used in this repo:
 
 1. update the version numbers in this file (above) as well as in
-   [`.travis.yml`](.travis.yml) and [`go.mod`](go.mod) to match
+   [`.github/workflows/main.yml`](.github/workflows/main.yml) and
+   [`go.mod`](go.mod) to match
 1. run `go mod tidy` to update the `go.sum` file
 1. run the updated `go get` commands above to get newer versions of the tools
 1. run the `go generate` command above to regenerate the mocks
