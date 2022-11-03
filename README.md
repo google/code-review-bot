@@ -44,8 +44,8 @@ $ ./crbot [options]
 Install [GoMock](https://github.com/golang/mock):
 
 ```bash
-$ go get github.com/golang/mock/gomock@v1.4.0
-$ go get github.com/golang/mock/mockgen@v1.4.0
+$ go get github.com/golang/mock/gomock@v1.6.0
+$ go get github.com/golang/mock/mockgen@v1.6.0
 ```
 
 Generate the mocks:
@@ -68,8 +68,8 @@ To update the versions of these tools used in this repo:
 1. run the `go generate` command above to regenerate the mocks
 1. [run the tests](#testing) from the top-level of the tree
 1. commit your changes to this file (`README.md`), `go.mod`, `go.sum`, and
-   `.travis.yml`, making sure that the build passes on Travis CI before merging
-   the change
+   `main.yml`, making sure that the build passes on GitHub Actions before
+   merging the change
 
 ## Testing
 
