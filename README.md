@@ -4,8 +4,8 @@
 [![Go Report Card][go-report-card-badge]][go-report-card-url]
 [![API docs][godoc-badge]][godoc-url]
 
-[github-ci-badge]: https://github.com/google/code-review-bot/actions/workflows/main.yml/badge.svg
-[github-ci-url]: https://github.com/google/code-review-bot/actions/workflows/main.yml
+[github-ci-badge]: https://github.com/google/code-review-bot/actions/workflows/main.yml/badge.svg?branch=main
+[github-ci-url]: https://github.com/google/code-review-bot/actions/workflows/main.yml?query=branch%3Amain
 [go-report-card-badge]: https://goreportcard.com/badge/github.com/google/code-review-bot
 [go-report-card-url]: https://goreportcard.com/report/github.com/google/code-review-bot
 [godoc-badge]: https://img.shields.io/badge/godoc-reference-5272B4.svg
