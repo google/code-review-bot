@@ -11,22 +11,13 @@
 [godoc-badge]: https://img.shields.io/badge/godoc-reference-5272B4.svg
 [godoc-url]: https://godoc.org/github.com/google/code-review-bot
 
-## Prerequisites
-
-Ensure that you have installed Go 1.11 or higher to enable support for [Go
-modules](https://github.com/golang/go/wiki/Modules) via `go mod`.
-
-If you're using Go 1.11 or 1.12, set the environment variable `GO111MODULE=on`
-(Go 1.13 and later versions [automatically enable module
-support](https://blog.golang.org/modules2019)).
-
 ## Building
 
 To build the `crbot` tool without a cloned repo (assuming that `$GOPATH/bin` is
 in your `$PATH`):
 
 ```bash
-$ go get github.com/google/code-review-bot/cmd/crbot
+$ go install github.com/google/code-review-bot/cmd/crbot@latest
 $ crbot [options]
 ```
 
@@ -44,8 +35,7 @@ $ ./crbot [options]
 Install [GoMock](https://github.com/golang/mock):
 
 ```bash
-$ go get github.com/golang/mock/gomock@v1.6.0
-$ go get github.com/golang/mock/mockgen@v1.6.0
+$ go install github.com/golang/mock/mockgen@v1.6.0
 ```
 
 Generate the mocks:

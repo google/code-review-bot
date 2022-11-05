@@ -25,7 +25,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go: [ '1.16', '1.15', '1.14', '1.13', '1.12' ]
+        go: [ '1.19', '1.18', '1.17', '1.16' ]
         os: [ 'ubuntu-22.04', 'macos-12' ]
     name: Go ${{ matrix.go }} (${{ matrix.os }})
     steps:
@@ -41,9 +41,7 @@ jobs:
         run: go build -v ./...
 
       - name: Install dependencies for testing
-        run: |
-          go get github.com/golang/mock/gomock@v1.6.0
-          go get github.com/golang/mock/mockgen@v1.6.0
+        run: go install github.com/golang/mock/mockgen@v1.6.0
 
       - name: Generate mocks for testing
         run: go generate ./...
