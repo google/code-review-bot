@@ -32,7 +32,7 @@ $ ./crbot [options]
 
 ## Developing
 
-Install [GoMock](https://github.com/golang/mock):
+Install the `mockgen` tool from [GoMock](https://github.com/golang/mock):
 
 ```bash
 $ go install github.com/golang/mock/mockgen@v1.6.0
@@ -44,17 +44,18 @@ Generate the mocks:
 $ go generate ./...
 ```
 
-This specific version of both `gomock` and `mockgen` tools is what's used in
-this repo, and tests will fail if your version of these tools generates
-different code, including comments.
+This specific version of the `mockgen` tool is what's used in this repo, and
+tests will fail if your version generates different code, including comments.
 
-To update the versions of these tools used in this repo:
+To update the version of the tools used in this repo:
 
-1. update the version numbers in this file (above) as well as in
+1. update the version number in this file (above) as well as in
    [`.github/workflows/main.yml`](.github/workflows/main.yml) and
-   [`go.mod`](go.mod) to match
+   [`go.mod`](go.mod) (see entry for `github.com/golang/mock`) to match —
+   note that you should use the same version for `mockgen` as for the
+   `github.com/golang/mock` repo to ensure they're mutually-consistent
 1. run `go mod tidy` to update the `go.sum` file
-1. run the updated `go get` commands above to get newer versions of the tools
+1. run the updated `go install` command above to get newer version of `mockgen`
 1. run the `go generate` command above to regenerate the mocks
 1. [run the tests](#testing) from the top-level of the tree
 1. commit your changes to this file (`README.md`), `go.mod`, `go.sum`, and
